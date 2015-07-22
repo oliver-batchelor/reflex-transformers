@@ -42,6 +42,7 @@ library
   exposed-modules:
     Reflex.Host.App
     Reflex.Host.App.Internal
+  ghc-prof-options: -fprof-auto
 
 test-suite doctests
   type:    exitcode-stdio-1.0
