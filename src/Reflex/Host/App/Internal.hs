@@ -9,6 +9,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ImpredicativeTypes #-}
+{-# LANGUAGE TemplateHaskell #-}
+
 -- | Module exposing the internal implementation of the host monad.
 -- There is no guarrante about stability of this module.
 -- If possible, use 'Reflex.Host.App' instead.
@@ -17,14 +20,18 @@ module Reflex.Host.App.Internal where
 import Control.Applicative
 import Control.Concurrent
 import Control.Monad.Reader
-import Control.Monad.Trans.Maybe
-import Control.Monad.Writer
+import Control.Monad.State.Strict
 import Data.Dependent.Sum
 import Data.Maybe
 import Data.Semigroup.Applicative
 import Prelude
 import Reflex.Class hiding (constant)
 import Reflex.Host.Class
+import Data.IORef
+import Data.Tuple
+
+
+import Control.Lens
 
 import qualified Data.DList as DL
 import qualified Data.Foldable as F
@@ -35,113 +42,43 @@ import qualified Data.Traversable as T
 --   these are stored in a channel to be processed by the application.
 type AppInputs t = [DSum (EventTrigger t)]
 
+type AppInfo t = Event t (HostFrame t ())
+
 -- | This is the environment in which the app host monad runs.
 data AppEnv t = AppEnv
-  { -- | This is the channel to which external events should push their triggers.
+    -- | This is the channel to which external events should push their triggers.
     --
     -- Because this is a channel, there is no guarrante that the event that was pushed
     -- is fired directly in the next frame, as there can already be other events waiting
     -- which will be fired first.
-    envEventChan :: Chan (AppInputs t)
+  { envEventChan    :: Chan (AppInputs t)
+  , envEventFrame   :: IORef (AppInputs t)
+
   }
 
 -- | An action that is run after a frame. It may return event triggers to fire events.
 -- For more information about this type, see the field 'eventsToPerform' of 'AppInfo'.
-type AppPerformAction t = HostFrame t (DL.DList (DSum (EventTrigger t)))
 
--- | Information required to set up the application. This also contains all reflex events
--- that the application wants to perform. An 'AppInfo' is called *registered* or *active*
--- if it is currently in use, meaning that the specified events are actually performed.
---
--- The 'AppInfo' represents the output side of a reflex FRP framework. It is used to
--- perform IO actions in response to FRP events, for example. This is called the *effect*
--- of the 'AppInfo'.
-data AppInfo t = AppInfo
-  { -- | Events that are performed after each frame.
-    --
-    -- Each event in this list will be checked after a frame. If it is firing with some
-    -- 'AppPerformAction', then this action will be executed. The events will be fired
-    -- before any other, currently waiting external events contained in the
-    -- `envEventChan` are processed.
-    --
-    -- The event occurrences returned by each 'AppPerformAction' are collected in a list.
-    -- If the list is non-empty, then a new frame will be created where all the collected
-    -- occurrences are fired at the same time. This process continues until no events
-    -- should be fired anymore. Only after this process has finished, external events
-    -- contained in the `envEventChan` are processed again.
-    --
-    -- A common place where you need this is when you want to fire some event in response
-    -- to another event, but you need to perform a monadic action such as IO to compute
-    -- the value of the response. Using this field, you can perform the monadic action
-    -- and then return a trigger to fire the event. This guarrantes that the event is
-    -- fired immediately after the frame has finished, even if other, external events
-    -- are waiting.
-    eventsToPerform :: DL.DList (Event t (AppPerformAction t))
 
-    -- | Events that, when fired, quit the application.
-  , eventsToQuit :: DL.DList (Event t ())
-
-    -- | Delayed event triggers that will be fired immediately after the initial
-    -- application setup has completed, before any external events are processed.
-  , triggersToFire :: Ap (HostFrame t) (DL.DList (DSum (EventTrigger t)))
+data AppState t = AppState 
+  { _appPostBuild  :: !(HostFrame t ())
+  , _appPerform    :: ![Event t (HostFrame t ())]
   }
 
--- | 'AppInfo' is a monoid. 'mappend' just merges the effects of both app infos.
--- 'mempty' is an 'AppInfo' that has no effect at all when registered.
-instance Applicative (HostFrame t) => Monoid (AppInfo t) where
-  mempty = AppInfo mempty mempty mempty
-  mappend (AppInfo a b c) (AppInfo a' b' c') =
-    AppInfo (mappend a a') (mappend b b') (mappend c c')
-
--- | Produce an 'AppInfo' which only contains 'eventsToPerform'. This is useful in a
--- monoid chain, like @infoToPerform toPerform <> infoToQuit toQuit@.
-infoPerform :: Applicative (HostFrame t)
-            => DL.DList (Event t (AppPerformAction t)) -> AppInfo t
-infoPerform x = mempty { eventsToPerform = x }
-
--- | Produce an 'AppInfo' which only contains 'eventsToQuit'.
-infoQuit :: Applicative (HostFrame t) => DL.DList (Event t ()) -> AppInfo t
-infoQuit x = mempty { eventsToQuit = x }
-
--- | Produce an 'AppInfo' which only contains 'triggersToFire'.
-infoFire :: Applicative (HostFrame t)
-           => HostFrame t (DL.DList (DSum (EventTrigger t))) -> AppInfo t
-infoFire x = mempty { triggersToFire = Ap x }
-
--- | Extract the 'eventsToPerform' and 'eventsToQuit' and merge each into a single event.
-appInfoEvents :: (Reflex t, Applicative (HostFrame t))
-              => AppInfo t -> (Event t (AppPerformAction t), Event t ())
-appInfoEvents AppInfo{..} =
-  ( mergeWith (liftA2 (<>)) $ DL.toList eventsToPerform
-  , leftmost $ DL.toList eventsToQuit
-  )
-
--- | Switch to a different 'AppInfo' whenever an 'Event' fires. Only the events of the
--- currently active application are performed.
---
--- This low-level primitive is used for implementing higher-level functions such as
--- 'switchAppHost', 'performAppHost' or 'dynAppHost'.
-switchAppInfo :: (Reflex t, MonadHold t m, Applicative (HostFrame t))
-              => AppInfo t -> Event t (AppInfo t) -> m (AppInfo t)
-switchAppInfo initialInfo updatedInfo = do
-  toPerform <- switch <$> hold initialToPerform updatedToPerform
-  toQuit    <- switch <$> hold initialToQuit updatedToQuit
-  pure AppInfo
-    { eventsToPerform = pure toPerform <> pure (getApp . triggersToFire <$> updatedInfo)
-    , eventsToQuit = pure toQuit
-    , triggersToFire = triggersToFire initialInfo
-    }
- where
-  (updatedToPerform, updatedToQuit) = splitE $ fmap appInfoEvents updatedInfo
-  (initialToPerform, initialToQuit) = appInfoEvents initialInfo
+$(makeLenses ''AppState)  
 --------------------------------------------------------------------------------
 
 -- | An implementation of the 'MonadAppHost' typeclass. You should not need to use this
 -- type directly. Instead, use the methods provided by the 'MonadAppHost' typeclass and
 -- then run your application using 'hostApp' to choose this implementation.
 newtype AppHost t a = AppHost
-  { unAppHost :: ReaderT (AppEnv t) (WriterT (Ap (HostFrame t) (AppInfo t)) (HostFrame t)) a
+  { unAppHost :: ReaderT (AppEnv t) (StateT (AppState t) (HostFrame t))  a
   }
+
+instance (Reflex t, MonadReflexCreateTrigger t m) => MonadReflexCreateTrigger t (StateT s m) where
+  newEventWithTrigger initializer = lift $ newEventWithTrigger initializer
+
+  
 deriving instance ReflexHost t => Functor (AppHost t)
 deriving instance ReflexHost t => Applicative (AppHost t)
 deriving instance ReflexHost t => Monad (AppHost t)
@@ -153,10 +90,22 @@ deriving instance ReflexHost t => MonadFix (AppHost t)
 
 -- | Run the application host monad in a reflex host frame and return the produced
 -- application info.
+runAppHostFrame :: ReflexHost t => AppEnv t -> AppHost t a -> HostFrame t (a, AppInfo t)
+runAppHostFrame env app = do 
+  (a, state) <- flip runStateT initial . flip runReaderT env .  unAppHost $ app
+  _appPostBuild state
+  return $ (a, mergeWith (>>) (_appPerform state))
+  
+  where initial = AppState (pure ()) []
+        
 execAppHostFrame :: ReflexHost t => AppEnv t -> AppHost t () -> HostFrame t (AppInfo t)
-execAppHostFrame env app = do
-  Ap minfo <- execWriterT . flip runReaderT env . unAppHost $ app
-  minfo
+execAppHostFrame env app = snd <$> runAppHostFrame env app
+
+readPerformed :: MonadIO m =>  AppEnv t -> m (AppInputs t)
+readPerformed env = liftIO $ do
+  performed <- readIORef (envEventFrame env)
+  writeIORef (envEventFrame env) []
+  return performed
 
 -- | Run an application. The argument is an action in the application host monad,
 -- where events can be set up (for example by using 'newExteneralEvent').
@@ -164,37 +113,36 @@ execAppHostFrame env app = do
 -- This function will block until the application exits (when one of the 'eventsToQuit'
 -- fires).
 hostApp :: (ReflexHost t, MonadIO m, MonadReflexHost t m) => AppHost t () -> m ()
-hostApp app = initHostApp app >>= F.mapM_ runStep where
-  runStep (chan, step) = do
-    nextInput <- liftIO (readChan chan)
-    step nextInput >>= flip when (runStep (chan, step))
+hostApp app = do
+  (chan, step) <- initHostApp app 
+  forever $ liftIO (readChan chan) >>= step
+
 
 -- | Initialize the application using a 'AppHost' monad. This function enables use
 -- of use an external control loop. It returns a step function to step the application
 -- based on external inputs received through the channel.
 -- The step function returns False when one of the 'eventsToQuit' is fired.
 initHostApp :: (ReflexHost t, MonadIO m, MonadReflexHost t m)
-            => AppHost t () -> m (Maybe (Chan (AppInputs t), AppInputs t -> m Bool))
+            => AppHost t () -> m (Chan (AppInputs t), AppInputs t -> m ())
 initHostApp app = do
-  chan <- liftIO newChan
-  AppInfo{..} <- runHostFrame $ execAppHostFrame (AppEnv chan) app
-  nextActionEvent <- subscribeEvent $ mergeWith (liftA2 (<>)) $ DL.toList eventsToPerform
-  quitEvent <- subscribeEvent $ mergeWith mappend $ DL.toList eventsToQuit
+  env <- liftIO $ AppEnv <$> newChan <*> newIORef []
+  
+  toPerform <- runHostFrame $ execAppHostFrame env app
+  nextActionEvent <- subscribeEvent toPerform
 
   let
     go [] = return ()
     go triggers = do
-      (nextAction, continue) <- lift $ fireEventsAndRead triggers $
-        (,) <$> eventValue nextActionEvent <*> fmap isNothing (readEvent quitEvent)
-      guard continue
-      maybe (return mempty) (lift . runHostFrame) nextAction >>= go . DL.toList
-
+      maybeAction <- fireEventsAndRead triggers $ eventValue nextActionEvent 
+      forM_ maybeAction $ \nextAction -> do
+        runHostFrame nextAction
+        go =<< readPerformed env
+        
     eventValue :: MonadReadEvent t m => EventHandle t a -> m (Maybe a)
     eventValue = readEvent >=> T.sequenceA
 
-  runMaybeT $ do
-    go =<< lift (runHostFrame (DL.toList <$> getApp triggersToFire))
-    return (chan, fmap isJust . runMaybeT . go)
+  go =<< readPerformed env
+  return (envEventChan env, go)
 --------------------------------------------------------------------------------
 
 -- | Class providing common functionality for implementing reflex frameworks.
@@ -218,7 +166,12 @@ class (ReflexHost t, MonadSample t m, MonadHold t m, MonadReflexCreateTrigger t 
   -- Note that the events fired by this function are fired asynchronously. In particular,
   -- if a lot of events are fired, then it can happen that the event queue already
   -- contains other events. In that case, those events will be fired first.
-  getAsyncFire :: m ([DSum (EventTrigger t)] -> IO ())
+  getFireAsync :: m ([DSum (EventTrigger t)] -> IO ())
+  
+
+  
+  getFireFrame :: m (DSum (EventTrigger t) -> IO ())
+
 
   -- | Get a function to run the host monad. Useful for implementing dynamic switching.
   --
@@ -235,7 +188,7 @@ class (ReflexHost t, MonadSample t m, MonadHold t m, MonadReflexCreateTrigger t 
   -- @m a -> HostFrame t (HostFrame t (AppInfo t), a)@.
   -- Executing outermost @HostFrame t@ will only perform step 1. The inner layer will
   -- then perform step 2, and the returned 'AppInfo' represents step 3.
-  getRunAppHost :: m (m a -> HostFrame t (HostFrame t (AppInfo t), a))
+  getRunAppHost :: m (m a -> HostFrame t (AppInfo t, a))
 
   -- | Run an action after all other actions have been ran and add information about the
   -- application. After the host monad's actions have been executed, actions registered
@@ -247,17 +200,28 @@ class (ReflexHost t, MonadSample t m, MonadHold t m, MonadReflexCreateTrigger t 
   -- some cases, since it is not lazy enough. Using this function, the sampling can
   -- instead be done after the host monad has finished, so the behavior is not forced too
   -- early.
-  performPostBuild_ :: HostFrame t (AppInfo t) -> m ()
+  performEvent_ :: Event t (HostFrame t ()) -> m ()
+  
+  schedulePostBuild :: HostFrame t () -> m ()
+  
 
   -- | Directly run a HostFrame action in the host app monad.
   liftHostFrame :: HostFrame t a -> m a
 
 -- | 'AppHost' is an implementation of 'MonadAppHost'.
 instance (ReflexHost t, MonadIO (HostFrame t)) => MonadAppHost t (AppHost t) where
-  getAsyncFire = AppHost $ fmap liftIO . writeChan . envEventChan <$> ask
-  getRunAppHost = AppHost $ do
-    env <- ask
-    let rearrange (a, Ap m) = (m, a)
-    pure $ fmap rearrange . runWriterT . flip runReaderT env . unAppHost
-  performPostBuild_ mevent = AppHost . tell $ Ap mevent
+  getFireAsync = AppHost $ fmap liftIO . writeChan . envEventChan <$> ask
+
+  getFireFrame = AppHost $ do
+    eventsFrameRef <- envEventFrame <$> ask
+    return $ \e -> liftIO $ modifyIORef eventsFrameRef (e:)
+
+  
+  getRunAppHost = do
+    env <- AppHost ask
+    pure $ fmap swap . runAppHostFrame env
+    
+  performEvent_ event = AppHost $ appPerform %= (event:) 
+  schedulePostBuild action = AppHost $ appPostBuild %= (>>action) 
+  
   liftHostFrame = AppHost . lift . lift

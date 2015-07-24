@@ -1,14 +1,11 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TupleSections, ScopedTypeVariables #-}
 -- | Module supporting the implementation of frameworks. You should import this if you
 -- want to build your own framework.
 module Reflex.Host.App
   ( hostApp
-  , newEventWithConstructor, newExternalEvent
-  , performEventAndTrigger_, performEvent_, performEvent
-  , switchAppHost, performAppHost, dynAppHost, holdAppHost
-  , getPostBuild, performPostBuild, performEventAsync
-  , MonadAppHost(..), AppHost()
-  , AppInfo(..), infoPerform, infoQuit, infoFire, switchAppInfo
+  , newExternalEvent, performEvent_, performEvent
+  , performPostBuild, getPostBuild, performEventAsync
+  , MonadAppHost(..), AppHost(), AppInfo
   ) where
 
 import Control.Applicative
@@ -24,8 +21,8 @@ import Reflex.Dynamic
 import Reflex.Host.App.Internal
 import Reflex.Host.Class
 
-import qualified Data.Foldable as F
-import qualified Data.Traversable as T
+import  Data.Foldable
+import  Data.Traversable
 
 import Prelude -- Silence AMP warnings
 
@@ -43,36 +40,36 @@ newEventWithConstructor = do
   ref <- liftIO $ newIORef Nothing
   event <- newEventWithTrigger (\h -> writeIORef ref Nothing <$ writeIORef ref (Just h))
   return (event, \a -> fmap (:=> a) <$> liftIO (readIORef ref))
-
+  
+  
+  
+  
 -- | Create a new event from an external event source. The returned function can be used
 -- to fire the event.
 newExternalEvent :: MonadAppHost t m => m (Event t a, a -> IO Bool)
 newExternalEvent = do
-  asyncFire <- getAsyncFire
+  fire <- getFireAsync
   (event, construct) <- newEventWithConstructor
-  return (event, fmap isJust . T.traverse (asyncFire . pure) <=< construct)
+  return (event, fmap isJust . traverse (fire . pure) <=< construct)
 
--- | Run a monadic action after each frame in which the given event fires
--- and possibly fire other events as a result (fired in a new frame, together with all
--- other events to fire from this frame).
---
--- The events are fired synchronously, so they are processed before any other
--- external events.
-performEventAndTrigger_ :: MonadAppHost t m => Event t (AppPerformAction t) -> m ()
-performEventAndTrigger_ = performPostBuild_ . pure . infoPerform . pure
 
--- | Run a monadic action after each frame in which the  event fires.
-performEvent_ :: MonadAppHost t m => Event t (HostFrame t ()) -> m ()
-performEvent_ = performEventAndTrigger_ . fmap (mempty <$)
+newFrameEvent :: MonadAppHost t m => m (Event t a, a -> IO Bool)
+newFrameEvent = do
+  fire <- getFireFrame
+  (event, construct) <- newEventWithConstructor
+  return (event, fmap isJust . traverse fire <=< construct)
+
 
 -- | Run a monadic action after each frame in which the event fires, and return the result
 -- in a new event which is fired immediately following the frame in which the original
 -- event fired.
 performEvent :: MonadAppHost t m => Event t (HostFrame t a) -> m (Event t a)
 performEvent event = do
-  (result, construct) <- newEventWithConstructor
-  performEventAndTrigger_ $ (fmap (F.foldMap pure) . liftIO . construct =<<) <$> event
+  (result, fire) <- newFrameEvent
+  performEvent_ $ (void . liftIO . fire =<<) <$> event
   return result
+  
+  
 
 -- | Run some IO asynchronously in another thread starting after the frame in which the
 -- input event fires and fire an event with the result of the IO action after it
@@ -80,7 +77,7 @@ performEvent event = do
 performEventAsync :: MonadAppHost t m => Event t (IO a) -> m (Event t a)
 performEventAsync event = do
   (result, fire) <- newExternalEvent
-  performEvent_ $ void . liftIO . forkIO .  (void . fire =<<) <$> event
+  performEvent_ $ liftIO <$> (void . forkIO . void . fire =<<) <$> event
   return result
 
 -- | Run a HostFrame action after application setup is complete and fire an event with the
@@ -90,16 +87,16 @@ performEventAsync event = do
 -- more convenient to use.
 performPostBuild ::  (MonadAppHost t m) => HostFrame t a -> m (Event t a)
 performPostBuild action = do
-  (event, construct) <- newEventWithConstructor  
-  performPostBuild_ $ do
-    a <- action
-    pure $ infoFire $ liftIO (F.foldMap pure <$> construct a)
-  return event
+  (result, fire) <- newFrameEvent
+  schedulePostBuild $ void . liftIO . fire =<< action
+  return result
 
 -- | Provide an event which is triggered directly after the initial setup of the
 -- application is completed.
 getPostBuild :: (MonadAppHost t m) =>  m (Event t ())
 getPostBuild = performPostBuild (return ())
+
+
 
 -- | Run an action in a 'MonadAppHost' monad, but do not register the 'AppInfo' for this
 -- action nor its postBuild actions.
@@ -107,7 +104,7 @@ getPostBuild = performPostBuild (return ())
 --
 -- For example, all 'performEvent_' calls inside the passed action will not actually be
 -- performed, as long as the returned 'AppInfo' is not registered manually.
-runAppHost :: MonadAppHost t m => m a -> m (HostFrame t (AppInfo t), a)
+runAppHost :: MonadAppHost t m => m a -> m (AppInfo t, a)
 runAppHost action = liftHostFrame . ($ action) =<< getRunAppHost
 
 -- | Switch to a different host action after an event fires. Only the 'AppInfo' of the
@@ -120,34 +117,19 @@ runAppHost action = liftHostFrame . ($ action) =<< getRunAppHost
 --
 -- Whenever a switch to a new host action happens, the returned event is fired in the
 -- next frame with the result of running it.
-switchAppHost :: MonadAppHost t m => HostFrame t (AppInfo t) -> Event t (m a) -> m (Event t a)
+switchAppHost :: MonadAppHost t m => AppInfo t -> Event t (m a) -> m (Event t a)
 switchAppHost initial event = do
   run <- getRunAppHost
-  let runWithPost = run >=> \(post, a) -> (,a) <$> post
-  (infoEvent, valueEvent) <- fmap splitE . performEvent $ runWithPost <$> event
-  performPostBuild_ $ flip switchAppInfo infoEvent =<< initial
+  (infoEvent, valueEvent) <- fmap splitE . performEvent $ run <$> event  
+  performEvent_ =<< switchPromptly initial infoEvent
   return valueEvent
-
--- | Like 'switchAppHost', but without an initial action.
+-- 
+-- -- | Like 'switchAppHost', but without an initial action.
 performAppHost :: MonadAppHost t m => Event t (m a) -> m (Event t a)
-performAppHost = switchAppHost (pure mempty)
+performAppHost = switchAppHost never
 
--- | Like 'switchAppHost', but taking the initial action from a 'Dynamic'. The returned
--- event is also fired once in the frame directly after the call to this function, firing
--- with the result of the initial action.
-dynAppHost :: MonadAppHost t m => Dynamic t (m a) -> m (Event t a)
-dynAppHost dyn = do
-  run <- getRunAppHost
-  (initialEvent, initialConstruct) <- newEventWithConstructor
-  updatedEvent <- flip switchAppHost (updated dyn) $ do
-    (minfo, r) <- sample (current dyn) >>= run
-    info <- minfo
-    trigger <- liftIO $ initialConstruct r
-    pure $ info <> F.foldMap (infoFire . pure . pure) trigger
-  pure $ leftmost [updatedEvent, initialEvent]
-
--- | Like 'switchAppHost', but taking the initial postBuild action from another host
--- action.
+-- -- | Like 'switchAppHost', but taking the initial postBuild action from another host
+-- -- action.
 holdAppHost :: MonadAppHost t m => m a -> Event t (m a) -> m (Dynamic t a)
 holdAppHost mInit mChanged = do
   (postActions, aInit) <- runAppHost mInit
