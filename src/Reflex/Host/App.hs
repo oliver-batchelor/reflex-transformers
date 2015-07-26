@@ -4,7 +4,8 @@
 module Reflex.Host.App
   ( hostApp
   , newExternalEvent, performEvent_, performEvent
-  , performPostBuild, getPostBuild, performEventAsync
+  , getPostBuild, performEventAsync
+  , schedulePostBuild, performPostBuild
   , MonadAppHost(..), AppHost(), AppInfo
   ) where
 
@@ -35,29 +36,29 @@ import Prelude -- Silence AMP warnings
 -- does return 'Nothing' instead of an event trigger. This does not mean that it will
 -- neccessarily return Nothing on the next call too though.
 newEventWithConstructor
-  :: MonadAppHost t m => m (Event t a, a -> IO (Maybe (DSum (EventTrigger t))))
+  :: MonadAppHost t m => m (Event t a, a -> IO [DSum (EventTrigger t)])
 newEventWithConstructor = do
   ref <- liftIO $ newIORef Nothing
   event <- newEventWithTrigger (\h -> writeIORef ref Nothing <$ writeIORef ref (Just h))
-  return (event, \a -> fmap (:=> a) <$> liftIO (readIORef ref))
+  return (event, \a -> maybeToList . fmap (:=> a) <$> liftIO (readIORef ref))
   
   
   
   
 -- | Create a new event from an external event source. The returned function can be used
 -- to fire the event.
-newExternalEvent :: MonadAppHost t m => m (Event t a, a -> IO Bool)
+newExternalEvent :: MonadAppHost t m => m (Event t a, a -> IO ())
 newExternalEvent = do
   fire <- getFireAsync
   (event, construct) <- newEventWithConstructor
-  return (event, fmap isJust . traverse (fire . pure) <=< construct)
+  return (event,  liftIO . fire . liftIO . construct)
 
 
-newFrameEvent :: MonadAppHost t m => m (Event t a, a -> IO Bool)
-newFrameEvent = do
-  fire <- getFireFrame
+newFrameEvent :: MonadAppHost t m => m (Event t a,  a -> IO ())
+newFrameEvent =  do
+  fire <- getPostFrame
   (event, construct) <- newEventWithConstructor
-  return (event, fmap isJust . traverse fire <=< construct)
+  return (event,  liftIO . fire . liftIO . construct)
 
 
 -- | Run a monadic action after each frame in which the event fires, and return the result
@@ -87,9 +88,10 @@ performEventAsync event = do
 -- more convenient to use.
 performPostBuild ::  (MonadAppHost t m) => HostFrame t a -> m (Event t a)
 performPostBuild action = do
-  (result, fire) <- newFrameEvent
-  schedulePostBuild $ void . liftIO . fire =<< action
-  return result
+  fire <- getPostFrame
+  (event, construct) <- newEventWithConstructor
+  liftIO . fire $ liftIO . construct =<< action
+  return event
 
 -- | Provide an event which is triggered directly after the initial setup of the
 -- application is completed.

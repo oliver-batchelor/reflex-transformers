@@ -40,7 +40,7 @@ import qualified Data.Traversable as T
 
 -- | AppInputs are inputs to the application triggered by the external UI.
 --   these are stored in a channel to be processed by the application.
-type AppInputs t = [DSum (EventTrigger t)]
+type AppInputs t = HostFrame t [DSum (EventTrigger t)]
 
 type AppInfo t = Event t (HostFrame t ())
 
@@ -52,7 +52,7 @@ data AppEnv t = AppEnv
     -- is fired directly in the next frame, as there can already be other events waiting
     -- which will be fired first.
   { envEventChan    :: Chan (AppInputs t)
-  , envEventFrame   :: IORef (AppInputs t)
+  , envEventFrame   :: IORef [AppInputs t]
 
   }
 
@@ -101,12 +101,11 @@ runAppHostFrame env app = do
 execAppHostFrame :: ReflexHost t => AppEnv t -> AppHost t () -> HostFrame t (AppInfo t)
 execAppHostFrame env app = snd <$> runAppHostFrame env app
 
-readPerformed :: MonadIO m =>  AppEnv t -> m (AppInputs t)
-readPerformed env = liftIO $ do
-  performed <- readIORef (envEventFrame env)
-  writeIORef (envEventFrame env) []
-  return performed
-
+readFrames :: (ReflexHost t, MonadIO m, MonadReflexHost t m) =>  AppEnv t -> m [DSum (EventTrigger t)]
+readFrames env =  do
+  performed <- liftIO $ atomicModifyIORef (envEventFrame env) (\a -> ([], a))
+  runHostFrame $ concat <$> sequence performed
+  
 -- | Run an application. The argument is an action in the application host monad,
 -- where events can be set up (for example by using 'newExteneralEvent').
 --
@@ -116,7 +115,6 @@ hostApp :: (ReflexHost t, MonadIO m, MonadReflexHost t m) => AppHost t () -> m (
 hostApp app = do
   (chan, step) <- initHostApp app 
   forever $ liftIO (readChan chan) >>= step
-
 
 -- | Initialize the application using a 'AppHost' monad. This function enables use
 -- of use an external control loop. It returns a step function to step the application
@@ -136,13 +134,13 @@ initHostApp app = do
       maybeAction <- fireEventsAndRead triggers $ eventValue nextActionEvent 
       forM_ maybeAction $ \nextAction -> do
         runHostFrame nextAction
-        go =<< readPerformed env
+        go =<< readFrames env
         
     eventValue :: MonadReadEvent t m => EventHandle t a -> m (Maybe a)
     eventValue = readEvent >=> T.sequenceA
 
-  go =<< readPerformed env
-  return (envEventChan env, go)
+  go =<< readFrames env
+  return (envEventChan env, go <=< runHostFrame)
 --------------------------------------------------------------------------------
 
 -- | Class providing common functionality for implementing reflex frameworks.
@@ -166,11 +164,11 @@ class (ReflexHost t, MonadSample t m, MonadHold t m, MonadReflexCreateTrigger t 
   -- Note that the events fired by this function are fired asynchronously. In particular,
   -- if a lot of events are fired, then it can happen that the event queue already
   -- contains other events. In that case, those events will be fired first.
-  getFireAsync :: m ([DSum (EventTrigger t)] -> IO ())
+  getFireAsync :: m (AppInputs t -> IO ())
   
 
   
-  getFireFrame :: m (DSum (EventTrigger t) -> IO ())
+  getPostFrame :: m (AppInputs t -> IO ())
 
 
   -- | Get a function to run the host monad. Useful for implementing dynamic switching.
@@ -210,9 +208,11 @@ class (ReflexHost t, MonadSample t m, MonadHold t m, MonadReflexCreateTrigger t 
 
 -- | 'AppHost' is an implementation of 'MonadAppHost'.
 instance (ReflexHost t, MonadIO (HostFrame t)) => MonadAppHost t (AppHost t) where
-  getFireAsync = AppHost $ fmap liftIO . writeChan . envEventChan <$> ask
+  getFireAsync = AppHost $ do
+    chan <- envEventChan <$> ask
+    return $ liftIO . writeChan chan
 
-  getFireFrame = AppHost $ do
+  getPostFrame = AppHost $ do
     eventsFrameRef <- envEventFrame <$> ask
     return $ \e -> liftIO $ modifyIORef eventsFrameRef (e:)
 
