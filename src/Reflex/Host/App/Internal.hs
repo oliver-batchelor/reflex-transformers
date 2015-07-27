@@ -77,6 +77,8 @@ newtype AppHost t a = AppHost
 
 instance (Reflex t, MonadReflexCreateTrigger t m) => MonadReflexCreateTrigger t (StateT s m) where
   newEventWithTrigger initializer = lift $ newEventWithTrigger initializer
+  newFanEventWithTrigger initializer = lift $ newFanEventWithTrigger initializer
+
 
   
 deriving instance ReflexHost t => Functor (AppHost t)
@@ -164,7 +166,7 @@ class (ReflexHost t, MonadSample t m, MonadHold t m, MonadReflexCreateTrigger t 
   -- Note that the events fired by this function are fired asynchronously. In particular,
   -- if a lot of events are fired, then it can happen that the event queue already
   -- contains other events. In that case, those events will be fired first.
-  getFireAsync :: m (AppInputs t -> IO ())
+  getPostAsync :: m (AppInputs t -> IO ())
   
 
   
@@ -208,7 +210,7 @@ class (ReflexHost t, MonadSample t m, MonadHold t m, MonadReflexCreateTrigger t 
 
 -- | 'AppHost' is an implementation of 'MonadAppHost'.
 instance (ReflexHost t, MonadIO (HostFrame t)) => MonadAppHost t (AppHost t) where
-  getFireAsync = AppHost $ do
+  getPostAsync = AppHost $ do
     chan <- envEventChan <$> ask
     return $ liftIO . writeChan chan
 

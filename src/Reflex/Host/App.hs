@@ -49,7 +49,7 @@ newEventWithConstructor = do
 -- to fire the event.
 newExternalEvent :: MonadAppHost t m => m (Event t a, a -> IO ())
 newExternalEvent = do
-  fire <- getFireAsync
+  fire <- getPostAsync
   (event, construct) <- newEventWithConstructor
   return (event,  liftIO . fire . liftIO . construct)
 
