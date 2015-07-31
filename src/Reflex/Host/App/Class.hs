@@ -22,11 +22,11 @@ class (ReflexHost t, MonadSample t m, MonadHold t m, MonadFix m, Monoid (AppResu
   type AppResult m  :: *    
   
   hostSwitch  :: AppResult m -> Event t (AppResult m) -> m ()
-  hostPerform :: Event t (m a) -> Event t a
-  hostCollect :: m a -> m (AppResult m, a)
+  hostPerform :: Event t (m a) -> m (Event t (a, AppResult m))
+  hostCollect :: m a -> m (a, AppResult m)
   
   
-class (MonadAppHost t m, MonadIO m, MonadIO (HostFrame t), MonadFix (HostFrame t), MonadReflexCreateTrigger t m) 
+class (ReflexHost t, MonadIO m, MonadIO (HostFrame t), MonadFix (HostFrame t), MonadReflexCreateTrigger t m) 
       => MonadIOHost t m | m -> t
 
 class (MonadIOHost t m) => HasPostFrame t m | m -> t where

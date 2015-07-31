@@ -70,7 +70,7 @@ deriving instance ReflexHost t => MonadReflexCreateTrigger t (IOHost t)
 deriving instance (MonadIO (HostFrame t), ReflexHost t) => MonadIO (IOHost t)
 deriving instance ReflexHost t => MonadFix (IOHost t)
 
-instance (MonadIO (HostFrame t), ReflexHost t) => MonadIOHost t (IOHost t)
+deriving instance (MonadIO (HostFrame t), ReflexHost t) => MonadIOHost t (IOHost t)
 
 -- | Run the application host monad in a reflex host frame and return the produced
 -- application info.
@@ -88,20 +88,20 @@ execIOHostFrame env app = snd <$> runIOHostFrame env app
 
 
 
-instance  HasPostFrame t (IOHost t) where
+instance MonadIOHost t (IOHost t) => HasPostFrame t (IOHost t) where
   askPostFrame = IOHost $ do
     eventsFrameRef <- envEventFrame <$> ask
     return $ \e -> liftIO $ modifyIORef eventsFrameRef (e:)
   
-instance  HasPostAsync t (IOHost t) where
+instance  MonadIOHost t (IOHost t) => HasPostAsync t (IOHost t) where
   askPostAsync = IOHost $ do
     chan <- envEventChan <$> ask
     return $ liftIO . writeChan chan
   
-instance  HasPostBuild t (IOHost t) where
+instance  MonadIOHost t (IOHost t) => HasPostBuild t (IOHost t) where
   schedulePostBuild action = IOHost $ hostPostBuild %= (>>action)
       
-instance HasVoidActions t (IOHost t) where 
+instance  MonadIOHost t (IOHost t) => HasVoidActions t (IOHost t) where 
   performEvent_ event = IOHost $ hostActions %= ((Traversal <$> event):) 
 
 

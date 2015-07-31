@@ -2,11 +2,10 @@
 -- | Module supporting the implementation of frameworks. You should import this if you
 -- want to build your own framework.
 module Reflex.Host.App
-  ( hostApp
-  , newExternalEvent, performEvent_, performEvent
-  , getPostBuild, performEventAsync
-  , schedulePostBuild, performPostBuild
-  , MonadAppHost(..), AppHost(), AppInfo
+  ( newExternalEvent, performEvent_, performEvent, performEventAsync
+  , getPostBuild, generateEvent, schedulePostBuild
+  , MonadAppHost(..), HasPostFrame(..), HasPostAsync(..)
+  , HasVoidActions(..), HasPostBuild(..)
   ) where
 
 import Control.Applicative
@@ -43,11 +42,11 @@ newEventWithConstructor = do
   return (event, \a -> maybeToList . fmap (:=> a) <$> liftIO (readIORef ref))
   
   
-  
+   
   
 -- | Create a new event from an external event source. The returned function can be used
 -- to fire the event.
-newExternalEvent :: (MonadReflexCreateTrigger t m, MonadIO m, HasPostAsync t m, MonadIO (HostFrame t)) 
+newExternalEvent :: (HasPostAsync t m) 
                  => m (Event t a, a -> IO ())
 newExternalEvent = do
   fire <- askPostAsync
@@ -55,7 +54,7 @@ newExternalEvent = do
   return (event,  liftIO . fire . liftIO . construct)
 
 
-newFrameEvent :: (MonadReflexCreateTrigger t m, MonadIO m, HasPostFrame t m, MonadIO (HostFrame t)) 
+newFrameEvent :: (HasPostFrame t m) 
               => m (Event t a,  a -> IO ())
 newFrameEvent =  do
   fire <- askPostFrame
@@ -66,7 +65,7 @@ newFrameEvent =  do
 -- | Run a monadic action after each frame in which the event fires, and return the result
 -- in a new event which is fired immediately following the frame in which the original
 -- event fired.
-performEvent :: (MonadReflexCreateTrigger t m, MonadIO m, HasPostFrame t m, HasVoidActions t m, MonadIO (HostFrame t)) 
+performEvent :: (HasPostFrame t m, HasVoidActions t m) 
              => Event t (HostFrame t a) -> m  (Event t a)
 performEvent event = do
   (result, fire) <- newFrameEvent
@@ -75,10 +74,11 @@ performEvent event = do
   
   
 
+  
 -- | Run some IO asynchronously in another thread starting after the frame in which the
 -- input event fires and fire an event with the result of the IO action after it
 -- completed.
-performEventAsync :: (MonadReflexCreateTrigger t m, MonadIO m, HasPostAsync t m, HasVoidActions t m, MonadIO (HostFrame t)) 
+performEventAsync :: (HasPostAsync t m, HasVoidActions t m) 
                    => Event t (IO a) -> m (Event t a)
 performEventAsync event = do
   (result, fire) <- newExternalEvent
@@ -92,7 +92,7 @@ performEventAsync event = do
 --
 -- Typical use is sampling from Dynamics/Behaviors and providing the result in an Event
 -- more convenient to use.
-generateEvent ::  (MonadReflexCreateTrigger t m, MonadIO m, HasPostFrame t m, MonadIO (HostFrame t)) 
+generateEvent ::  (HasPostFrame t m) 
               => HostFrame t a -> m (Event t a)
 generateEvent action = do
   fire <- askPostFrame
@@ -102,7 +102,7 @@ generateEvent action = do
 
 -- | Provide an event which is triggered directly after the initial setup of the
 -- application is completed.
-getPostBuild ::  (MonadReflexCreateTrigger t m, MonadIO m, HasPostFrame t m, MonadIO (HostFrame t)) 
+getPostBuild ::  (HasPostFrame t m) 
              => m (Event t ())
 getPostBuild = generateEvent (return ())
 
@@ -111,16 +111,16 @@ getPostBuild = generateEvent (return ())
 performAppHost :: MonadAppHost t m => Event t (m a) -> m (Event t a)
 performAppHost mChanged = do 
   updates <- hostPerform mChanged
-  hostSwitch mempty (fst <$> updates)
-  return (snd <$> updates)
+  hostSwitch mempty (snd <$> updates) 
+  return (fst <$> updates)
   
 
 -- -- | Like 'switchAppHost', but taking the initial postBuild action from another host
 -- -- action.
 holdAppHost :: MonadAppHost t m => m a -> Event t (m a) -> m (Dynamic t a)
 holdAppHost mInit mChanged = do
-  (r, a) <- hostCollect
+  (a, r) <- hostCollect mInit
   updates <- hostPerform mChanged
-  hostSwitch r (fst <$> updates)
-  holdDyn a (snd <$> updates)
+  hostSwitch r (snd <$> updates)
+  holdDyn a (fst <$> updates)
   
