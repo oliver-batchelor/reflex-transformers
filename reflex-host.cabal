@@ -40,9 +40,23 @@ library
     , dependent-sum
     , transformers
     , lens
+  default-extensions:
+    FlexibleInstances
+    TupleSections
+    FlexibleContexts
+    StandaloneDeriving
+    FunctionalDependencies
+    RecordWildCards
+    TypeFamilies
+    GeneralizedNewtypeDeriving
+    MultiParamTypeClasses
+    ScopedTypeVariables
+
+    
   exposed-modules:
     Reflex.Host.App
-    Reflex.Host.App.Internal
+    Reflex.Host.App.Class
+    Reflex.Host.App.IO
 
 test-suite doctests
   type:    exitcode-stdio-1.0
