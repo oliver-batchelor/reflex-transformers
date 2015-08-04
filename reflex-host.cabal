@@ -51,12 +51,16 @@ library
     GeneralizedNewtypeDeriving
     MultiParamTypeClasses
     ScopedTypeVariables
+    RankNTypes
+    GADTs
 
     
   exposed-modules:
     Reflex.Host.App
     Reflex.Host.App.Class
     Reflex.Host.App.IO
+    Reflex.Host.App.Pure
+
 
 test-suite doctests
   type:    exitcode-stdio-1.0

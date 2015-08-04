@@ -1,4 +1,3 @@
-{-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -8,13 +7,11 @@ import Data.Dependent.Sum
 
 import Reflex.Class hiding (constant)
 import Reflex.Host.Class
-import Reflex
+-- import Reflex
 
 import Control.Monad
 import Control.Monad.State.Strict
-
 import Data.Semigroup.Applicative
-
 import Data.Maybe
 
 
@@ -31,10 +28,7 @@ class (Reflex t) => Switchable t r | r -> t where
 
 instance (Monoid a, Reflex t) => Switchable t (Behavior t a)  where
   genericSwitch = switcher
-    
-instance (Monoid a, Reflex t) => Switchable t (Maybe (Behavior t a))  where
-  genericSwitch mb e = Just <$> switcher (fromMaybe mempty mb) (fmapMaybe id e)  
-    
+      
 instance (Reflex t) => Switchable t (Event t a) where
   genericSwitch = switchPromptly
 
@@ -102,24 +96,16 @@ class (HostHasIO t m) => HasPostAsync t m | m -> t where
 class (HostHasIO t m) => HasPostBuild t m | m -> t where
   schedulePostBuild :: HostFrame t () -> m ()
   
-
 class HasHostActions t r | r -> t where
-  fromHostActions :: HostActions t -> r 
-  
-
+  fromActions :: HostActions t -> r
+ 
 instance HasHostActions t (HostActions t) where
-  fromHostActions = id
-  
-instance (HasHostActions t a, Monoid b) => HasHostActions t (a, b) where
-  fromHostActions h = (fromHostActions h, mempty)
-  
-
+  fromActions = id
+ 
+performEvent_ :: (Reflex t, HostWriter r m, HasHostActions t r) =>  Event t (HostFrame t ()) -> m ()
+performEvent_ e = tellHost . fromActions . HostActions $ Traversal <$> e
       
-performEvent_ :: (HostWriter r m, HasHostActions t r) => HostActions t -> m ()
-performEvent_ = tellHost . fromHostActions
-  
-  
-  
+ 
   
 -- deriving creates an error requiring ImpredicativeTypes
 instance (Reflex t, MonadReflexCreateTrigger t m) => MonadReflexCreateTrigger t (StateT s m) where
