@@ -37,56 +37,73 @@ import Prelude
 
 data EventChannels t = EventChannels
     -- | This is the channel to which external events should push their triggers.
-    --
-    -- Because this is a channel, there is no guarrante that the event that was pushed
-    -- is fired directly in the next frame, as there can already be other events waiting
-    -- which will be fired first.
+    -- These events are processed in a FIFO queue after any internal events are fired,
+    -- they will not necessarily occur in the frame after they were fired.
+    
   { envEventChan    :: Chan (AppInputs t)
+  
+    -- | Internal events should push triggers to this list istead.
+    -- these triggers will be gathered up and fired immediately in the next frame 
   , envEventFrame   :: IORef [AppInputs t]
   }
 
 
 type VoidActions t = Event t (Traversal (HostFrame t))    
   
-data HostActions t = HostActions 
+data HostState t r = HostState 
   { _hostPostBuild  :: HostFrame t ()
-  , _hostActions    :: [VoidActions t]
+  , _hostActions    :: [r]
   }  
   
   
-$(makeLenses ''HostActions)    
+$(makeLenses ''HostState)    
 
 
-newtype IOHost t  a = IOHost
-  { unIOHost :: ReaderT (EventChannels t) (StateT (HostActions t) (HostFrame t))  a
+newtype IOHost t r a = IOHost
+  { unIOHost :: StateT (HostState t r) (HostFrame t)  a
   }
 
-deriving instance ReflexHost t => Functor (IOHost t)
-deriving instance ReflexHost t => Applicative (IOHost t)
-deriving instance ReflexHost t => Monad (IOHost t)
-deriving instance ReflexHost t => MonadHold t (IOHost t)
-deriving instance ReflexHost t => MonadSample t (IOHost t)
-deriving instance ReflexHost t => MonadReflexCreateTrigger t (IOHost t)
-deriving instance (MonadIO (HostFrame t), ReflexHost t) => MonadIO (IOHost t)
-deriving instance ReflexHost t => MonadFix (IOHost t)
+deriving instance ReflexHost t => Functor (IOHost t r)
+deriving instance ReflexHost t => Applicative (IOHost t r)
+deriving instance ReflexHost t => Monad (IOHost t r)
+deriving instance ReflexHost t => MonadHold t (IOHost t r)
+deriving instance ReflexHost t => MonadSample t (IOHost t r)
+deriving instance ReflexHost t => MonadReflexCreateTrigger t (IOHost t r)
+deriving instance (MonadIO (HostFrame t), ReflexHost t) => MonadIO (IOHost t r)
+deriving instance ReflexHost t => MonadFix (IOHost t r)
 
-deriving instance (MonadIO (HostFrame t), ReflexHost t) => MonadIOHost t (IOHost t)
+ 
+instance (Monoid r, ReflexHost t, HostHasIO t (IOHost t r)) => HostWriter r (IOHost t r) where
+  tellHost r = IOHost $ hostActions %= (r:) 
+  collectHost  = liftHostFrame . runIOHostFrame 
+
+  
+instance (MonadIO (HostFrame t), Switchable t r, Monoid r, ReflexHost t, HasHostActions t r) => MonadAppHost t r (IOHost t r) where
+  performHost e = performEvent $ runIOHostFrame <$> e 
+  
+ 
+
+instance (MonadIO (HostFrame t), ReflexHost t) => HostHasIO t (IOHost t r)
+  
+  
+instance  HostHasIO t (IOHost t r) => HasPostBuild t (IOHost t r) where
+  schedulePostBuild action = IOHost $ hostPostBuild %= (>>action)  
+  
+  
 
 -- | Run the application host monad in a reflex host frame and return the produced
 -- application info.
-runIOHostFrame :: (ReflexHost t) => EventChannels t -> IOHost t a -> HostFrame t (a, VoidActions t)
-runIOHostFrame env app = do 
-  (a, actions) <- flip runStateT initial . flip runReaderT env .  unIOHost $ app
+runIOHostFrame :: (ReflexHost t, Monoid r) => IOHost t r a -> HostFrame t (a, r)
+runIOHostFrame app = do 
+  (a, actions) <- flip runStateT initial .  unIOHost $ app
   _hostPostBuild actions
   return (a, mconcat $ _hostActions actions)
-    where initial = HostActions (return ()) []
+    where initial = HostState (return ()) []
   
+execIOHostFrame :: (ReflexHost t, Monoid r) =>  IOHost t r a -> HostFrame t r
+execIOHostFrame app = snd <$> runIOHostFrame app
 
-  
-execIOHostFrame :: (ReflexHost t)  =>  EventChannels t -> IOHost t a -> HostFrame t (VoidActions t)
-execIOHostFrame env app = snd <$> runIOHostFrame env app
-
-
+{-
 
 instance MonadIOHost t (IOHost t) => HasPostFrame t (IOHost t) where
   askPostFrame = IOHost $ do
@@ -98,11 +115,8 @@ instance  MonadIOHost t (IOHost t) => HasPostAsync t (IOHost t) where
     chan <- envEventChan <$> ask
     return $ liftIO . writeChan chan
   
-instance  MonadIOHost t (IOHost t) => HasPostBuild t (IOHost t) where
-  schedulePostBuild action = IOHost $ hostPostBuild %= (>>action)
+
       
-instance  MonadIOHost t (IOHost t) => HasVoidActions t (IOHost t) where 
-  performEvent_ event = IOHost $ hostActions %= ((Traversal <$> event):) 
 
 
 readFrames :: (ReflexHost t, MonadIO m, MonadReflexHost t m) =>  EventChannels t -> m [DSum (EventTrigger t)]
@@ -145,7 +159,6 @@ initHostApp app = do
 
   go =<< readFrames env
   return (envEventChan env, go <=< runHostFrame)    
-  
+  -}
 
 
-  
