@@ -66,6 +66,11 @@ class (Reflex t, MonadHold t m, HostWriter r m, Switchable t r) => MonadAppHost 
   -- | Run a monadic action in an event, returning the value and writer result
   performHost :: Event t (m a) -> m (Event t (a, r))
   
+  -- | Provided purely for performance reasons, run this reactive code at the lowest
+  -- level providing MonadHold, MonadFix. To avoid needlessly running Pure AppHosts on
+  -- top of a stack of transformers.
+  liftHold :: (forall n. (MonadHold t n, MonadFix n) => n a) -> m a
+  
 
   
   

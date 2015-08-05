@@ -51,18 +51,33 @@ deriving instance ReflexHost t => Applicative (PureHost t r)
 deriving instance ReflexHost t => Monad (PureHost t r)
 deriving instance ReflexHost t => MonadHold t (PureHost t r)
 deriving instance ReflexHost t => MonadSample t (PureHost t r)
-deriving instance ReflexHost t => MonadFix (PureHost t r) 
+deriving instance ReflexHost t => MonadFix (PureHost t r)  
+
+
+  
+instance (ReflexHost t, Monoid r) => HostWriter r (PureHost t r) where
+  tellHost r = PureHost $ modify (r:) 
+  collectHost ma = liftHoldPure (runPureHost ma)
+    
  
--- instance (Monoid r) => HostWriter r (PureHost t r) where
---   tellHost r = PureHost $ hostActions %= (r:) 
---   collectHost ma  = do
---     env <- PureHost ask
---     liftHostFrame $ runPureHostFrame env ma
+liftHoldPure :: (Reflex t) => (forall n. (MonadHold t n, MonadFix n) => n a) -> PureHost t r a
+liftHoldPure ma = PureHost $ lift (M ma)
+
+
+
+runPureHost :: (MonadHold t m, MonadFix m, Monoid r) => PureHost t r a -> m (a, r)
+runPureHost app = do 
+  (a, r) <- unM . flip runStateT [] . unPureHost $ app
+  return (a, mconcat r)
 
   
--- instance (Switchable t r, Monoid r, Reflex t, HasHostActions t r) => MonadAppHost t r (PureHost t r) where
+instance (ReflexHost t, Switchable t r, Monoid r, HasHostActions t r) => MonadAppHost t r (PureHost t r) where
 
+  --performHost :: Event t (m a) -> m (Event t (a, r))
+  --liftHold :: (forall m. (MonadHold t m', MonadFix m') => m' a) -> m a
+  performHost = 
   
+  liftHold = liftHoldPure
   
 {-
 -- | Run the application host monad in a reflex host frame and return the produced

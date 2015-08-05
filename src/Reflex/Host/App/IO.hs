@@ -10,6 +10,7 @@ import Control.Concurrent
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Control.Lens hiding (Traversal)
+import Data.Dependent.Sum
 import Data.IORef
 
 import Reflex.Class hiding (constant)
@@ -40,7 +41,14 @@ data EventChannels t = EventChannels
 
   
 data HostState t r = HostState 
+
+    -- | Post build actions are run directly after the construction
+    -- useful for sampling behaviors which would otherwise result in 
+    -- loops during construction.
   { _hostPostBuild  :: HostFrame t ()
+  
+    -- | The host writer 'return' values, these are merged after construction
+    -- a list is used for efficiency rather than using 'mappend' at each step.
   , _hostActions    :: [r]
   }  
   
@@ -109,15 +117,19 @@ runIOHostFrame env app = do
 execIOHostFrame :: (ReflexHost t, Monoid r) => EventChannels t -> IOHost t r a -> HostFrame t r
 execIOHostFrame env app = snd <$> runIOHostFrame env app
 
+
+-- | Read event triggers to be called in the next frame (all at once)
+readFrames :: (ReflexHost t, MonadIO m, MonadReflexHost t m) =>  EventChannels t -> m [DSum (EventTrigger t)]
+readFrames env =  do
+  performed <- liftIO $ atomicModifyIORef (envEventFrame env) (\a -> ([], a))
+  runHostFrame $ concat <$> sequence performed
+
 {-
 
     
 
 
-readFrames :: (ReflexHost t, MonadIO m, MonadReflexHost t m) =>  EventChannels t -> m [DSum (EventTrigger t)]
-readFrames env =  do
-  performed <- liftIO $ atomicModifyIORef (envEventFrame env) (\a -> ([], a))
-  runHostFrame $ concat <$> sequence performed
+
   
 -- | Run an application. The argument is an action in the application host monad,
 -- where events can be set up (for example by using 'newExteneralEvent').
