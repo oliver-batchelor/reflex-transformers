@@ -12,6 +12,7 @@ import Control.Monad.State.Strict
 import Control.Lens hiding (Traversal)
 import Data.Dependent.Sum
 import Data.IORef
+import Data.Bifunctor
 
 import Reflex.Class hiding (constant)
 import Reflex.Host.Class
@@ -81,6 +82,7 @@ instance (MonadIO (HostFrame t), Switchable t r, Monoid r, ReflexHost t, HasHost
   performHost e = do 
     env <- IOHost ask
     performEvent $ runIOHostFrame env <$> e 
+  liftHold = liftHostFrame
   
   
 instance HostHasIO t (IOHost t r) => HasPostFrame t (IOHost t r) where
@@ -116,6 +118,14 @@ runIOHostFrame env app = do
   
 execIOHostFrame :: (ReflexHost t, Monoid r) => EventChannels t -> IOHost t r a -> HostFrame t r
 execIOHostFrame env app = snd <$> runIOHostFrame env app
+
+
+instance (ReflexHost t, HostHasIO t (IOHost t r), Monoid s, Monoid r) => HostMap (IOHost t) s r  where  
+  mapHost f ms = do
+    env <- IOHost ask
+    (a, (r, b)) <- second f <$> liftHostFrame (runIOHostFrame env ms)
+    tellHost r
+    return (a, b)
 
 
 -- | Read event triggers to be called in the next frame (all at once)

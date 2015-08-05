@@ -59,7 +59,6 @@ appendHost :: HostMap m (r, s) r => m (r, s) a -> m r (a, s)
 appendHost = mapHost id
 
 
-
   
 class (Reflex t, MonadHold t m, HostWriter r m, Switchable t r) => MonadAppHost t r m | m -> t r where
   
@@ -72,12 +71,6 @@ class (Reflex t, MonadHold t m, HostWriter r m, Switchable t r) => MonadAppHost 
   liftHold :: (forall n. (MonadHold t n, MonadFix n) => n a) -> m a
   
 
-  
-  
--- hostEmbed :: (HostSwitch t m r, MonadIOHost t m' r')  => (r' -> r) -> m' r' a -> m r a
--- hostEmbed f inner = do
-  
-
 
   
 class (ReflexHost t, MonadIO m, MonadIO (HostFrame t), MonadFix (HostFrame t), MonadReflexCreateTrigger t m) 
@@ -86,9 +79,7 @@ class (ReflexHost t, MonadIO m, MonadIO (HostFrame t), MonadFix (HostFrame t), M
   -- | Lift a HostFrame to run in an IO based host
   liftHostFrame :: HostFrame t a -> m a
   
-  
--- class MonadIOHost   
-  
+
   
 newtype HostActions t = HostActions { unHostAction ::  Event t (Traversal (HostFrame t)) }  
       

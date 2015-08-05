@@ -2,19 +2,14 @@
 module Reflex.Host.App.Pure where
 
 import Control.Applicative
-import Control.Concurrent
 import Control.Monad.Reader
 import Control.Monad.State.Strict
-import Control.Lens 
-import Data.Traversable
+import Data.Bifunctor
 
 import Data.Maybe
 import Reflex.Class hiding (constant)
 import Reflex.Host.Class
 import Reflex.Host.App.Class
-
-import Reflex.Host.App
-
 
 import Prelude
 
@@ -28,9 +23,12 @@ instance Functor (M t) where
   
 instance Applicative (M t) where
   pure a = M (pure a)
+  (<*>) (M f) (M a) = M (f <*> a) 
   
 instance Monad (M t) where
   return a = M (return a)
+  (>>=) (M m) f = M (m >>= unM . f) 
+
 
 instance MonadFix (M t) where
   mfix f = M $ mfix (unM . f)
@@ -53,7 +51,6 @@ deriving instance ReflexHost t => MonadHold t (PureHost t r)
 deriving instance ReflexHost t => MonadSample t (PureHost t r)
 deriving instance ReflexHost t => MonadFix (PureHost t r)  
 
-
   
 instance (ReflexHost t, Monoid r) => HostWriter r (PureHost t r) where
   tellHost r = PureHost $ modify (r:) 
@@ -64,7 +61,6 @@ liftHoldPure :: (Reflex t) => (forall n. (MonadHold t n, MonadFix n) => n a) -> 
 liftHoldPure ma = PureHost $ lift (M ma)
 
 
-
 runPureHost :: (MonadHold t m, MonadFix m, Monoid r) => PureHost t r a -> m (a, r)
 runPureHost app = do 
   (a, r) <- unM . flip runStateT [] . unPureHost $ app
@@ -72,22 +68,14 @@ runPureHost app = do
 
   
 instance (ReflexHost t, Switchable t r, Monoid r, HasHostActions t r) => MonadAppHost t r (PureHost t r) where
-
-  --performHost :: Event t (m a) -> m (Event t (a, r))
-  --liftHold :: (forall m. (MonadHold t m', MonadFix m') => m' a) -> m a
-  performHost = 
-  
+  performHost e = return $ push (fmap Just . runPureHost) e
   liftHold = liftHoldPure
   
-{-
--- | Run the application host monad in a reflex host frame and return the produced
--- application info.
-runPureHostFrame :: (ReflexHost t, Monoid r) => EventChannels t -> PureHost t r a -> HostFrame t (a, r)
-runPureHostFrame env app = do 
-  (a, actions) <- flip runStateT initial . flip runReaderT env . unPureHost $ app
-  _hostPostBuild actions
-  return (a, mconcat $ _hostActions actions)
-    where initial = HostState (return ()) []
   
-execPureHostFrame :: (ReflexHost t, Monoid r) => EventChannels t -> PureHost t r a -> HostFrame t r
-execPureHostFrame env app = snd <$> runPureHostFrame env app-}
+instance (ReflexHost t, Monoid s, Monoid r) => HostMap (PureHost t) s r  where  
+  mapHost f ms = do
+    (a, (r, b)) <- second f <$> liftHoldPure (runPureHost ms)
+    tellHost r
+    return (a, b)
+    
+
