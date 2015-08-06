@@ -71,7 +71,6 @@ class (Reflex t, MonadHold t m, HostWriter r m, Switchable t r) => MonadAppHost 
   liftHold :: (forall n. (MonadHold t n, MonadFix n) => n a) -> m a
   
 
-
   
 class (ReflexHost t, MonadIO m, MonadIO (HostFrame t), MonadFix (HostFrame t), MonadReflexCreateTrigger t m) 
       => HostHasIO t m | m -> t where

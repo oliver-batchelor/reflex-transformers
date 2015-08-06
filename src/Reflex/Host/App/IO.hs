@@ -20,10 +20,6 @@ import Reflex.Host.Class
 import Reflex.Host.App.Class
 import Reflex.Host.App
 
-
-
-
-
 import Prelude
 
 
@@ -134,11 +130,15 @@ readFrames env =  do
   performed <- liftIO $ atomicModifyIORef (envEventFrame env) (\a -> ([], a))
   runHostFrame $ concat <$> sequence performed
 
-{-
 
-    
-
-
+  
+initIOHost :: (ReflexHost t, MonadIO m, MonadReflexHost t m)
+            => IOHost t r () -> m (Chan (AppInputs t), AppInputs t -> m ())
+initIOHost app = do
+  env <- liftIO $ EventChannels <$> newChan <*> newIORef []
+  
+  actionsEvent <- runHostFrame $ execIOHostFrame env app
+  nextActions <- subscribeEvent (getTraversal <$> actionsEvent)  
 
   
 -- | Run an application. The argument is an action in the application host monad,
@@ -146,36 +146,33 @@ readFrames env =  do
 --
 -- This function will block until the application exits (when one of the 'eventsToQuit'
 -- fires). 
-hostApp :: (ReflexHost t, MonadIO m, MonadReflexHost t m) => IOHost t () -> m ()
-hostApp app = do
-  (chan, step) <- initHostApp app 
-  forever $ liftIO (readChan chan) >>= step
+-- runIOHost :: (ReflexHost t, MonadIO m, MonadReflexHost t m) => IOHost t r () -> m ()
+-- runIOHost app = do
+--   (chan, step) <- initIOHost app 
+--   forever $ liftIO (readChan chan) >>= step
 
 -- | Initialize the application using a 'AppHost' monad. This function enables use
 -- of use an external control loop. It returns a step function to step the application
 -- based on external inputs received through the channel.
 -- The step function returns False when one of the 'eventsToQuit' is fired.
-initHostApp :: (ReflexHost t, MonadIO m, MonadReflexHost t m)
-            => IOHost t () -> m (Chan (AppInputs t), AppInputs t -> m ())
-initHostApp app = do
-  env <- liftIO $ EventChannels <$> newChan <*> newIORef []
-  
-  actionsEvent <- runHostFrame $ execIOHostFrame env app
-  nextActions <- subscribeEvent (getTraversal <$> actionsEvent)
+runEventQueue :: (ReflexHost t, MonadIO m, MonadReflexHost t m)
+            =>  EventHandle t (HostActions t) -> m ()
+runEventQueue readFrames readChan nextActions = do
+  go =<< readFrames env
+  return (envEventChan env, go <=< runHostFrame) 
 
-  let
+  where
     go [] = return ()
     go triggers = do
       maybeAction <- fireEventsAndRead triggers $ eventValue nextActions 
       forM_ maybeAction $ \nextAction -> do
-        runHostFrame nextAction
+        runHostFrame (getTraversal nextAction)
         go =<< readFrames env
         
     eventValue :: MonadReadEvent t m => EventHandle t a -> m (Maybe a)
     eventValue = readEvent >=> sequenceA
 
-  go =<< readFrames env
-  return (envEventChan env, go <=< runHostFrame)    
-  -}
+   
+  
 
 
