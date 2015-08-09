@@ -68,9 +68,12 @@ runPureHost app = do
 
   
 instance (ReflexHost t, Switchable t r, Monoid r, HasHostActions t r) => MonadAppHost t r (PureHost t r) where
-  performHost e = return $ push (fmap Just . runPureHost) e
-  liftHold = liftHoldPure
   
+  type Host t (PureHost t r) = M t
+  
+  performEvent e = return $ push (fmap Just . unM) e
+  liftAppHost (M m) = liftHoldPure m
+  askRunAppHost = return $ \m -> M (runPureHost m)
   
 instance (ReflexHost t, Monoid s, Monoid r) => HostMap (PureHost t) s r  where  
   mapHost f ms = do

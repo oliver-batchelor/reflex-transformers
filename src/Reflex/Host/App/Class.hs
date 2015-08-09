@@ -12,8 +12,9 @@ import Reflex.Host.Class
 import Control.Monad
 import Control.Monad.State.Strict
 import Data.Semigroup.Applicative
+import Data.Semigroup
 import Data.Maybe
-
+import Data.Foldable
 
 import Prelude
 
@@ -26,17 +27,26 @@ class (Reflex t) => Switchable t r | r -> t where
    genericSwitch :: MonadHold t m => r -> Event t r -> m r
 
 
-instance (Monoid a, Reflex t) => Switchable t (Behavior t a)  where
-  genericSwitch = switcher
-      
-instance (Reflex t) => Switchable t (Event t a) where
-  genericSwitch = switchPromptly
-
-
 instance (Switchable t a, Switchable t b) => Switchable t (a, b) where
   genericSwitch (a, b) e = liftM2 (,) (genericSwitch a $ fst <$> e) (genericSwitch b $ snd <$> e)
 
+
+newtype Behaviors t a = Behaviors { unBehaviors :: [Behavior t a] } deriving Monoid
+newtype Events t a = Events { unEvents :: [Event t a] } deriving Monoid
+
+instance (Monoid a, Reflex t) => Switchable t (Behaviors t a)  where
+  genericSwitch bs updated = Behaviors . pure <$> switcher (mergeBehaviors bs) (mergeBehaviors <$> updated)
+      
+instance (Semigroup a, Reflex t) => Switchable t (Events t a) where
+  genericSwitch es updated = Events . pure <$> switchPromptly (mergeEvents es) (mergeEvents <$> updated)
   
+  
+mergeEvents :: (Reflex t, Semigroup a) => Events t a -> Event t a
+mergeEvents = mconcat . unEvents
+
+mergeBehaviors :: (Reflex t, Monoid a) => Behaviors t a -> Behavior t a
+mergeBehaviors = mconcat . unBehaviors
+
   
 class (Monad m, Monoid r) => HostWriter r m | m -> r  where  
  
@@ -58,29 +68,40 @@ class (HostWriter r (m r), HostWriter s (m s)) => HostMap m s r  where
 appendHost :: HostMap m (r, s) r => m (r, s) a -> m r (a, s)
 appendHost = mapHost id
 
+holdHost :: (MonadHold t m, HostWriter r m, Switchable t r) => r -> Event t r -> m ()
+holdHost initial updated = tellHost =<< genericSwitch initial updated
+
+holdHostF :: (MonadHold t m,  HostWriter r m, Switchable t r, Foldable f) => f r -> Event t (f r) -> m ()
+holdHostF initial updated = tellHost =<< genericSwitch (fold initial) (fold <$> updated)
 
   
-class (Reflex t, MonadHold t m, HostWriter r m, Switchable t r) => MonadAppHost t r m | m -> t r where
+class (Reflex t, MonadFix m, MonadHold t m, MonadHold t (Host t m), MonadFix (Host t m),  
+       HostWriter r m, Switchable t r) => MonadAppHost t r m | m -> t r where
+  type Host t m :: * -> *
+    
+  -- | Run a monadic action after each frame in which the event fires, and return the result
+  -- in a new event which is fired immediately following the frame in which the original
+  -- event fired.
   
-  -- | Run a monadic action in an event, returning the value and writer result
-  performHost :: Event t (m a) -> m (Event t (a, r))
+  performEvent :: Event t (Host t m a) -> m (Event t a)
   
-  -- | Provided purely for performance reasons, run this reactive code at the lowest
-  -- level providing MonadHold, MonadFix. To avoid needlessly running Pure AppHosts on
-  -- top of a stack of transformers.
-  liftHold :: (forall n. (MonadHold t n, MonadFix n) => n a) -> m a
+  askRunAppHost :: m (m a -> Host t m (a, r)) 
   
+  liftAppHost :: Host t m a -> m a
+  
+  
+class (ReflexHost t, MonadIO m, MonadIO (HostFrame t), MonadFix (HostFrame t), 
+       MonadReflexCreateTrigger t m) => HostHasIO t m | m -> t 
+  
+  
+newtype HostActions t = HostActions { unHostAction ::  Events t (Traversal (HostFrame t)) }  deriving Monoid
+      
+hostAction :: Reflex t => Event t (HostFrame t ()) -> HostActions t
+hostAction e = HostActions $ Events [Traversal <$> e]
+      
+mergeHostActions :: (ReflexHost t) => HostActions t -> Event t (HostFrame t ())
+mergeHostActions (HostActions e) = getTraversal <$> mergeEvents e
 
-  
-class (ReflexHost t, MonadIO m, MonadIO (HostFrame t), MonadFix (HostFrame t), MonadReflexCreateTrigger t m) 
-      => HostHasIO t m | m -> t where
-  
-  -- | Lift a HostFrame to run in an IO based host
-  liftHostFrame :: HostFrame t a -> m a
-  
-
-  
-newtype HostActions t = HostActions { unHostAction ::  Event t (Traversal (HostFrame t)) }  
       
 class (HostHasIO t m) => HasPostFrame t m | m -> t where
   askPostFrame :: m (AppInputs t -> IO ())
@@ -97,10 +118,11 @@ class HasHostActions t r | r -> t where
 instance HasHostActions t (HostActions t) where
   fromActions = id
  
-performEvent_ :: (Reflex t, HostWriter r m, HasHostActions t r) =>  Event t (HostFrame t ()) -> m ()
-performEvent_ e = tellHost . fromActions . HostActions $ Traversal <$> e
-      
  
+performEvent_ :: (Reflex t, HostWriter r m, HasHostActions t r) =>  Event t (HostFrame t ()) -> m ()
+performEvent_  = tellHost . fromActions . hostAction
+      
+class (HasPostFrame t m, HasPostAsync t m, HasPostBuild t m, HasHostActions t r, MonadAppHost t r m) => MonadIOHost t r m | m -> t r
   
 -- deriving creates an error requiring ImpredicativeTypes
 instance (Reflex t, MonadReflexCreateTrigger t m) => MonadReflexCreateTrigger t (StateT s m) where

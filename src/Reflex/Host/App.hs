@@ -4,8 +4,19 @@
 module Reflex.Host.App 
   ( newExternalEvent, performEvent_, performEvent, performEventAsync
   , getPostBuild, generateEvent, schedulePostBuild
---   , MonadAppHost(..), HasPostFrame(..), HasPostAsync(..)
---   , HasVoidActions(..), HasPostBuild(..)
+
+  , newFrameEvent, newExternalEvent
+  
+  , AppInputs, Switchable(..)
+  , HostWriter(..), HostMap(..)
+  , MonadAppHost(..)
+  , HostHasIO (..)
+  , MonadIOHost (..)
+  
+  , HasPostBuild (..)
+  
+  , holdHost, holdHostF
+  
   ) where
 
 import Control.Applicative
@@ -62,17 +73,6 @@ newFrameEvent =  do
   return (event,  liftIO . fire . liftIO . construct)
 
 
--- | Run a monadic action after each frame in which the event fires, and return the result
--- in a new event which is fired immediately following the frame in which the original
--- event fired.
-performEvent :: (HasPostFrame t m, HostWriter r m, HasHostActions t r) 
-             => Event t (HostFrame t a) -> m  (Event t a)
-performEvent event = do
-  (result, fire) <- newFrameEvent
-  performEvent_ $ (void . liftIO . fire =<<) <$> event
-  return result
-  
-  
 
   
 -- | Run some IO asynchronously in another thread starting after the frame in which the
@@ -110,16 +110,18 @@ getPostBuild = generateEvent (return ())
 
 performAppHost :: MonadAppHost t r m => Event t (m a) -> m (Event t a)
 performAppHost mChanged = do 
-  updates <- performHost mChanged
-  tellHost =<< genericSwitch mempty (snd <$> updates) 
+  runAppHost <- askRunAppHost
+  updates <- performEvent $ runAppHost <$> mChanged
+  holdHost mempty (snd <$> updates) 
   return (fst <$> updates)
 
 -- -- | Like 'switchAppHost', but taking the initial postBuild action from another host
 -- -- action.
 holdAppHost :: MonadAppHost t r m => m a -> Event t (m a) -> m (Dynamic t a)
 holdAppHost mInit mChanged = do
+  runAppHost <- askRunAppHost
   (a, r) <- collectHost mInit
-  updates <- performHost mChanged
-  tellHost =<< genericSwitch r (snd <$> updates)
+  updates <- performEvent $ runAppHost <$> mChanged
+  holdHost r (snd <$> updates) 
   holdDyn a (fst <$> updates)
   
