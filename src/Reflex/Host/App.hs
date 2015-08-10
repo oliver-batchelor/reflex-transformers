@@ -15,7 +15,11 @@ module Reflex.Host.App
   
   , HasPostBuild (..)
   
+  , HostActions
+  , Events, Behaviors
+  
   , holdHost, holdHostF
+  , postQuit
   
   ) where
 
@@ -72,6 +76,11 @@ newFrameEvent =  do
   (event, construct) <- newEventWithConstructor
   return (event,  liftIO . fire . liftIO . construct)
 
+
+postQuit :: (HasPostAsync t m) => m ()
+postQuit = do
+  fire <- askPostAsync
+  liftIO $ fire (return [])
 
 
   

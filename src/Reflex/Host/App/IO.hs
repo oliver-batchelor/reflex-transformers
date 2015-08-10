@@ -127,14 +127,13 @@ instance (MonadIO (HostFrame t), Switchable t r, Monoid r, ReflexHost t, HasHost
     
 
 instance (MonadIO (HostFrame t), ReflexHost t) => HostHasIO t (IOHost t r) 
+instance (HasHostActions t r, HostHasIO t (IOHost t r), MonadAppHost t r (IOHost t r)) => MonadIOHost t r (IOHost t r)
   
   
 instance  HostHasIO t (IOHost t r) => HasPostBuild t (IOHost t r) where
   schedulePostBuild action = IOHost $ hostPostBuild %= (>>action)  
   
   
-
-
 
 
 -- | Read event triggers to be called in the next frame (all at once)
@@ -152,16 +151,21 @@ readFrames env =  do
 -- fires).
   
 hostApp :: (ReflexHost t, MonadIO m, MonadReflexHost t m) => IOHost t (HostActions t) () -> m ()
-hostApp app = do
-  (chan, step) <- initHostApp app 
-  forever $ liftIO (readChan chan) >>= step
+hostApp app = loop =<< initHostApp app 
+  
+  
+  where
+    loop (chan, step) = do
+      x <- liftIO (readChan chan) >>= runHostFrame
+      unless (null x) $ step x >> loop (chan, step)
+     
 
 -- | Initialize the application using a 'AppHost' monad. This function enables use
 -- of use an external control loop. It returns a step function to step the application
 -- based on external inputs received through the channel.
 -- The step function returns False when one of the 'eventsToQuit' is fired.
 initHostApp :: (ReflexHost t, MonadIO m, MonadReflexHost t m)
-            => IOHost t (HostActions t) () -> m (Chan (AppInputs t), AppInputs t -> m ())
+            => IOHost t (HostActions t) () -> m (Chan (AppInputs t), [DSum (EventTrigger t)] -> m ())
 initHostApp app = do
   env <- liftIO $ EventChannels <$> newChan <*> newIORef []
   
@@ -180,7 +184,7 @@ initHostApp app = do
     eventValue = readEvent >=> sequenceA
 
   go =<< readFrames env
-  return (envEventChan env, go <=< runHostFrame)
+  return (envEventChan env, go)
 
    
   

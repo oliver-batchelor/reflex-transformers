@@ -94,7 +94,11 @@ class (ReflexHost t, MonadIO m, MonadIO (HostFrame t), MonadFix (HostFrame t),
        MonadReflexCreateTrigger t m) => HostHasIO t m | m -> t 
   
   
-newtype HostActions t = HostActions { unHostAction ::  Events t (Traversal (HostFrame t)) }  deriving Monoid
+newtype HostActions t = HostActions { unHostAction ::  Events t (Traversal (HostFrame t)) }  deriving (Monoid)
+
+instance ReflexHost t => Switchable t (HostActions t) where
+    genericSwitch es updated = HostActions <$> genericSwitch (unHostAction es) (unHostAction <$> updated)
+
       
 hostAction :: Reflex t => Event t (HostFrame t ()) -> HostActions t
 hostAction e = HostActions $ Events [Traversal <$> e]
