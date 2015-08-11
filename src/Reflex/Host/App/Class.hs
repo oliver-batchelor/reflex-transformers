@@ -93,28 +93,45 @@ class (Reflex t, MonadFix m, MonadHold t m, MonadHold t (Host t m), MonadFix (Ho
 class (ReflexHost t, MonadIO m, MonadIO (HostFrame t), MonadFix (HostFrame t), 
        MonadReflexCreateTrigger t m) => HostHasIO t m | m -> t 
   
+type HostAction t =   Ap (HostFrame t) [DSum (EventTrigger t)]
   
-newtype HostActions t = HostActions { unHostAction ::  Events t (Traversal (HostFrame t)) }  deriving (Monoid)
+data HostActions t = HostActions 
+  { hostPerform :: Events t (HostAction t) 
+  , hostTrigger :: HostAction t
+  }  
 
-instance ReflexHost t => Switchable t (HostActions t) where
-    genericSwitch es updated = HostActions <$> genericSwitch (unHostAction es) (unHostAction <$> updated)
+instance ReflexHost t => Monoid (HostActions t) where
+  mempty = HostActions mempty mempty
+  mappend (HostActions p t) (HostActions p' t') = HostActions (mappend p p') (mappend t t')
+  
+-- instance ReflexHost t => Switchable t (HostActions t) where
+--     genericSwitch es updated = HostActions <$> genericSwitch (unHostAction es) (unHostAction <$> updated)
 
       
-hostAction :: Reflex t => Event t (HostFrame t ()) -> HostActions t
-hostAction e = HostActions $ Events [Traversal <$> e]
-      
-mergeHostActions :: (ReflexHost t) => HostActions t -> Event t (HostFrame t ())
-mergeHostActions (HostActions e) = getTraversal <$> mergeEvents e
+hostAction_ :: ReflexHost t => Event t (HostFrame t ()) -> HostActions t
+hostAction_ e = mempty { hostPerform = Events [Ap . fmap (const mempty) <$> e] }
+
+hostAction :: ReflexHost t => Event t (HostFrame t [DSum (EventTrigger t)]) -> HostActions t
+hostAction e = mempty { hostPerform = Events [Ap <$> e] }
 
       
-class (HostHasIO t m) => HasPostFrame t m | m -> t where
-  askPostFrame :: m (AppInputs t -> IO ())
+-- mergeHostActions :: (ReflexHost t) => HostActions t -> Event t (HostFrame t ())
+-- mergeHostActions (HostActions e) = getTraversal <$> mergeEvents e
+
+      
+-- class (HostHasIO t m) => HasPostFrame t m | m -> t where
+--   askPostFrame :: m (AppInputs t -> IO ())
   
 class (HostHasIO t m) => HasPostAsync t m | m -> t where
   askPostAsync :: m (AppInputs t -> IO ())
   
 class (HostHasIO t m) => HasPostBuild t m | m -> t where
-  schedulePostBuild :: HostFrame t () -> m ()
+  generatePostBuild :: HostFrame t [DSum (EventTrigger t)] -> m ()
+  
+  
+schedulePostBuild :: HasPostBuild t m => HostFrame t () -> m ()
+schedulePostBuild action = generatePostBuild (action >> pure mempty)
+
   
 class HasHostActions t r | r -> t where
   fromActions :: HostActions t -> r
@@ -123,10 +140,10 @@ instance HasHostActions t (HostActions t) where
   fromActions = id
  
  
-performEvent_ :: (Reflex t, HostWriter r m, HasHostActions t r) =>  Event t (HostFrame t ()) -> m ()
-performEvent_  = tellHost . fromActions . hostAction
+performEvent_ :: (ReflexHost t, HostWriter r m, HasHostActions t r) =>  Event t (HostFrame t ()) -> m ()
+performEvent_  = tellHost . fromActions . hostAction_
       
-class (HasPostFrame t m, HasPostAsync t m, HasPostBuild t m, HasHostActions t r, MonadAppHost t r m) => MonadIOHost t r m | m -> t r
+class ({-HasPostFrame t m,-} HasPostAsync t m, HasPostBuild t m, HasHostActions t r, MonadAppHost t r m) => MonadIOHost t r m | m -> t r
   
 -- deriving creates an error requiring ImpredicativeTypes
 instance (Reflex t, MonadReflexCreateTrigger t m) => MonadReflexCreateTrigger t (StateT s m) where

@@ -5,7 +5,7 @@ module Reflex.Host.App
   ( newExternalEvent, performEvent_, performEvent, performEventAsync
   , getPostBuild, generateEvent, schedulePostBuild
 
-  , newFrameEvent, newExternalEvent
+  , newExternalEvent
   
   , AppInputs, Switchable(..)
   , HostWriter(..), HostMap(..)
@@ -69,12 +69,12 @@ newExternalEvent = do
   return (event,  liftIO . fire . liftIO . construct)
 
 
-newFrameEvent :: (HasPostFrame t m) 
-              => m (Event t a,  a -> IO ())
-newFrameEvent =  do
-  fire <- askPostFrame
-  (event, construct) <- newEventWithConstructor
-  return (event,  liftIO . fire . liftIO . construct)
+-- newFrameEvent :: (HasPostFrame t m) 
+--               => m (Event t a,  a -> IO ())
+-- newFrameEvent =  do
+--   fire <- askPostFrame
+--   (event, construct) <- newEventWithConstructor
+--   return (event,  liftIO . fire . liftIO . construct)
 
 
 postQuit :: (HasPostAsync t m) => m ()
@@ -101,18 +101,15 @@ performEventAsync event = do
 --
 -- Typical use is sampling from Dynamics/Behaviors and providing the result in an Event
 -- more convenient to use.
-generateEvent ::  (HasPostFrame t m) 
-              => HostFrame t a -> m (Event t a)
+generateEvent ::  (HasPostBuild t m) => HostFrame t a -> m (Event t a)
 generateEvent action = do
-  fire <- askPostFrame
   (event, construct) <- newEventWithConstructor
-  liftIO . fire $ liftIO . construct =<< action
+  generatePostBuild $ liftIO . construct =<< action
   return event
 
 -- | Provide an event which is triggered directly after the initial setup of the
 -- application is completed.
-getPostBuild ::  (HasPostFrame t m) 
-             => m (Event t ())
+getPostBuild ::  (HasPostBuild t m) => m (Event t ())
 getPostBuild = generateEvent (return ())
 
  

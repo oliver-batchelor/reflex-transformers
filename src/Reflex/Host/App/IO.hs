@@ -23,38 +23,38 @@ import Reflex.Host.App
 import Prelude
 
 
-data EventChannels t = EventChannels
-    -- | This is the channel to which external events should push their triggers.
-    -- These events are processed in a FIFO queue after any internal events are fired,
-    -- they will not necessarily occur in the frame after they were fired.
-    
-  { envEventChan    :: Chan (AppInputs t)
-  
-    -- | Internal events should push triggers to this list istead.
-    -- these triggers will be gathered up and fired immediately in the next frame 
-  , envEventFrame   :: IORef [AppInputs t]
-  }
+-- data EventChannels t = EventChannels
+--     -- | This is the channel to which external events should push their triggers.
+--     -- These events are processed in a FIFO queue after any internal events are fired,
+--     -- they will not necessarily occur in the frame after they were fired.
+--     
+--   { envEventChan    :: Chan (AppInputs t)
+--   
+--     -- | Internal events should push triggers to this list istead.
+--     -- these triggers will be gathered up and fired immediately in the next frame 
+--   , envEventFrame   :: IORef [AppInputs t]
+--   }
 
 
   
-data HostState t r = HostState 
-
-    -- | Post build actions are run directly after the construction
-    -- useful for sampling behaviors which would otherwise result in 
-    -- loops during construction.
-  { _hostPostBuild  :: HostFrame t ()
-  
-    -- | The host writer 'return' values, these are merged after construction
-    -- a list is used for efficiency rather than using 'mappend' at each step.
-  , _hostActions    :: r
-  }  
+-- data HostState t r = HostState 
+-- 
+--     -- | Post build actions are run directly after the construction
+--     -- useful for sampling behaviors which would otherwise result in 
+--     -- loops during construction.
+--   { _hostPostBuild  :: HostFrame t ()
+--   
+--     -- | The host writer 'return' values, these are merged after construction
+--     -- a list is used for efficiency rather than using 'mappend' at each step.
+--   , _hostActions    :: r
+--   }  
   
   
 $(makeLenses ''HostState)    
 
 
 newtype IOHost t r a = IOHost
-  { unIOHost :: ReaderT (EventChannels t) (StateT (HostState t r) (HostFrame t))  a
+  { unIOHost :: ReaderT (Chan (AppInputs t)) (StateT r (HostFrame t))  a
   }
 
 deriving instance ReflexHost t => Functor (IOHost t r)
@@ -97,10 +97,10 @@ instance (ReflexHost t, HostHasIO t (IOHost t r), Monoid s, Monoid r) => HostMap
     return (a, b)    
     
   
-instance HostHasIO t (IOHost t r) => HasPostFrame t (IOHost t r) where
-  askPostFrame = IOHost $ do
-    eventsFrameRef <- envEventFrame <$> ask
-    return $ \e -> liftIO $ modifyIORef eventsFrameRef (e:)  
+-- instance HostHasIO t (IOHost t r) => HasPostFrame t (IOHost t r) where
+--   askPostFrame = IOHost $ do
+--     eventsFrameRef <- envEventFrame <$> ask
+--     return $ \e -> liftIO $ modifyIORef eventsFrameRef (e:)  
     
     
 instance HostHasIO t (IOHost t r) => HasPostAsync t (IOHost t r) where
