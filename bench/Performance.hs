@@ -73,7 +73,7 @@ domList input  = do
   
   let changes = diffInput (current input) (updated input)
 
-  viewChanges <- performEvent $ mapMOf (traverse . _Added) runAppHost <$> changes
+  viewChanges <- performHost $ mapMOf (traverse . _Added) runAppHost <$> changes
   views <- holdMap initial viewChanges
   
   holdHostF (snd <$> initial) (fmap snd <$> updated views)

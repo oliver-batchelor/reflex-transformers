@@ -83,7 +83,7 @@ class (Reflex t, MonadFix m, MonadHold t m, MonadHold t (Host t m), MonadFix (Ho
   -- in a new event which is fired immediately following the frame in which the original
   -- event fired.
   
-  performEvent :: Event t (Host t m a) -> m (Event t a)
+  performHost :: Event t (Host t m a) -> m (Event t a)
   
   askRunAppHost :: m (m a -> Host t m (a, r)) 
   

@@ -113,10 +113,7 @@ instance (MonadIO (HostFrame t), Switchable t r, Monoid r, ReflexHost t, HasHost
           
   type Host t (IOHost t r) = HostFrame t
   
-  performEvent event = do
-    (result, fire) <- newFrameEvent
-    performEvent_ $ (void . liftIO . fire =<<) <$> event
-    return result
+  performHost = performEvent
    
   askRunAppHost = IOHost $ do
     env <- ask

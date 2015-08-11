@@ -94,6 +94,11 @@ performEventAsync event = do
   performEvent_ $ liftIO <$> (void . forkIO . void . fire =<<) <$> event
   return result
   
+  
+performEvent event = do
+    (result, fire) <- newFrameEvent
+    performEvent_ $ (void . liftIO . fire =<<) <$> event
+    return result  
    
 
 -- | Run a HostFrame action after application setup is complete and fire an event with the
@@ -120,7 +125,7 @@ getPostBuild = generateEvent (return ())
 performAppHost :: MonadAppHost t r m => Event t (m a) -> m (Event t a)
 performAppHost mChanged = do 
   runAppHost <- askRunAppHost
-  updates <- performEvent $ runAppHost <$> mChanged
+  updates <- performHost $ runAppHost <$> mChanged
   holdHost mempty (snd <$> updates) 
   return (fst <$> updates)
 
@@ -130,7 +135,7 @@ holdAppHost :: MonadAppHost t r m => m a -> Event t (m a) -> m (Dynamic t a)
 holdAppHost mInit mChanged = do
   runAppHost <- askRunAppHost
   (a, r) <- collectHost mInit
-  updates <- performEvent $ runAppHost <$> mChanged
+  updates <- performHost $ runAppHost <$> mChanged
   holdHost r (snd <$> updates) 
   holdDyn a (fst <$> updates)
   
