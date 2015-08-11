@@ -15,6 +15,7 @@ import Data.Semigroup.Applicative
 import Data.Semigroup
 import Data.Maybe
 import Data.Foldable
+import Data.IORef
 
 import Prelude
 
@@ -83,7 +84,7 @@ class (Reflex t, MonadFix m, MonadHold t m, MonadHold t (Host t m), MonadFix (Ho
   -- in a new event which is fired immediately following the frame in which the original
   -- event fired.
   
-  performEvent :: Event t (Host t m a) -> m (Event t a)
+  performHost :: Event t (Host t m a) -> m (Event t a)
   
   askRunAppHost :: m (m a -> Host t m (a, r)) 
   
@@ -93,30 +94,44 @@ class (Reflex t, MonadFix m, MonadHold t m, MonadHold t (Host t m), MonadFix (Ho
 class (ReflexHost t, MonadIO m, MonadIO (HostFrame t), MonadFix (HostFrame t), 
        MonadReflexCreateTrigger t m) => HostHasIO t m | m -> t 
   
-type HostAction t =   Ap (HostFrame t) [DSum (EventTrigger t)]
-  
+type HostAction t = HostFrame t [DSum (EventTrigger t)]
+type ApHostAction t = Ap (HostFrame t) [DSum (EventTrigger t)]
+
+
+
 data HostActions t = HostActions 
-  { hostPerform :: Events t (HostAction t) 
-  , hostTrigger :: HostAction t
+  { hostPerform   :: Events t (ApHostAction t) 
+  , hostPostBuild :: ApHostAction t
   }  
 
 instance ReflexHost t => Monoid (HostActions t) where
   mempty = HostActions mempty mempty
   mappend (HostActions p t) (HostActions p' t') = HostActions (mappend p p') (mappend t t')
   
--- instance ReflexHost t => Switchable t (HostActions t) where
---     genericSwitch es updated = HostActions <$> genericSwitch (unHostAction es) (unHostAction <$> updated)
+instance ReflexHost t => Switchable t (HostActions t) where
+    genericSwitch (HostActions perform postBuild) updated = do
+      updatedPerform <- genericSwitch perform (hostPerform <$> updated)
+      return (HostActions (updatedPostBuild `mappend` updatedPerform) postBuild)
+      
+      where
+        updatedPostBuild = Events [hostPostBuild <$> updated]
+      
 
       
-hostAction_ :: ReflexHost t => Event t (HostFrame t ()) -> HostActions t
-hostAction_ e = mempty { hostPerform = Events [Ap . fmap (const mempty) <$> e] }
+makePerform_ :: ReflexHost t => Event t (HostFrame t ()) -> HostActions t
+makePerform_ e = mempty { hostPerform = Events [Ap . fmap (const mempty) <$> e] }
 
-hostAction :: ReflexHost t => Event t (HostFrame t [DSum (EventTrigger t)]) -> HostActions t
-hostAction e = mempty { hostPerform = Events [Ap <$> e] }
+makePerform :: ReflexHost t => Event t (HostFrame t [DSum (EventTrigger t)]) -> HostActions t
+makePerform e = mempty { hostPerform = Events [Ap <$> e] }
+
+
+makePostBuild :: ReflexHost t => HostFrame t [DSum (EventTrigger t)] -> HostActions t
+makePostBuild pb = mempty { hostPostBuild = Ap pb }
 
       
--- mergeHostActions :: (ReflexHost t) => HostActions t -> Event t (HostFrame t ())
--- mergeHostActions (HostActions e) = getTraversal <$> mergeEvents e
+mergeHostActions :: (ReflexHost t) => Events t (ApHostAction t) -> Event t (HostAction t)
+mergeHostActions e = getApp <$> mergeEvents e
+
 
       
 -- class (HostHasIO t m) => HasPostFrame t m | m -> t where
@@ -125,12 +140,9 @@ hostAction e = mempty { hostPerform = Events [Ap <$> e] }
 class (HostHasIO t m) => HasPostAsync t m | m -> t where
   askPostAsync :: m (AppInputs t -> IO ())
   
-class (HostHasIO t m) => HasPostBuild t m | m -> t where
-  generatePostBuild :: HostFrame t [DSum (EventTrigger t)] -> m ()
   
   
-schedulePostBuild :: HasPostBuild t m => HostFrame t () -> m ()
-schedulePostBuild action = generatePostBuild (action >> pure mempty)
+
 
   
 class HasHostActions t r | r -> t where
@@ -138,14 +150,48 @@ class HasHostActions t r | r -> t where
  
 instance HasHostActions t (HostActions t) where
   fromActions = id
- 
- 
+  
+  
+tellActions :: (ReflexHost t, HostWriter r m, HasHostActions t r) => HostActions t -> m ()
+tellActions = tellHost . fromActions
+
 performEvent_ :: (ReflexHost t, HostWriter r m, HasHostActions t r) =>  Event t (HostFrame t ()) -> m ()
-performEvent_  = tellHost . fromActions . hostAction_
+performEvent_  = tellActions . makePerform_
+
+generatePostBuild :: (ReflexHost t, HostWriter r m, HasHostActions t r) => HostFrame t [DSum (EventTrigger t)] -> m ()  
+generatePostBuild = tellActions . makePostBuild
+
+
+schedulePostBuild :: (ReflexHost t, HostWriter r m, HasHostActions t r) => HostFrame t () -> m ()
+schedulePostBuild action = generatePostBuild (action >> pure mempty)
+
+-- | Create a new event and return a function that can be used to construct an event
+-- trigger with an associated value. Note that this by itself will not fire the event.
+-- To fire the event, you still need to use either 'performPostBuild_' or 'getAsyncFire'
+-- which can fire these event triggers with an associated value.
+--
+-- Note that in some cases (such as when there are no listeners), the returned function
+-- does return 'Nothing' instead of an event trigger. This does not mean that it will
+-- neccessarily return Nothing on the next call too though.
+newEventWithConstructor
+  :: (MonadReflexCreateTrigger t m, MonadIO m) => m (Event t a, a -> IO [DSum (EventTrigger t)])
+newEventWithConstructor = do
+  ref <- liftIO $ newIORef Nothing
+  event <- newEventWithTrigger (\h -> writeIORef ref Nothing <$ writeIORef ref (Just h))
+  return (event, \a -> maybeToList . fmap (:=> a) <$> liftIO (readIORef ref))
+  
+  
+performEvent :: (HostHasIO t m, HostWriter r m, HasHostActions t r) =>  Event t (HostFrame t a) -> m (Event t a)
+performEvent e = do 
+  (event, construct) <- newEventWithConstructor
+  tellActions . makePerform $ (\h -> h >>= liftIO . construct) <$> e
+  return event
+
       
-class ({-HasPostFrame t m,-} HasPostAsync t m, HasPostBuild t m, HasHostActions t r, MonadAppHost t r m) => MonadIOHost t r m | m -> t r
+class (HasPostAsync t m, HasHostActions t r, MonadAppHost t r m) => MonadIOHost t r m | m -> t r
   
 -- deriving creates an error requiring ImpredicativeTypes
 instance (Reflex t, MonadReflexCreateTrigger t m) => MonadReflexCreateTrigger t (StateT s m) where
   newEventWithTrigger initializer = lift $ newEventWithTrigger initializer
   newFanEventWithTrigger initializer = lift $ newFanEventWithTrigger initializer
+  

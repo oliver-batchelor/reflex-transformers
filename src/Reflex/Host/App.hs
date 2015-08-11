@@ -3,17 +3,18 @@
 -- want to build your own framework.
 module Reflex.Host.App 
   ( newExternalEvent, performEvent_, performEvent, performEventAsync
-  , getPostBuild, generateEvent, schedulePostBuild
+--   , getPostBuild, generateEvent
+  
+  , schedulePostBuild
 
-  , newExternalEvent
   
   , AppInputs, Switchable(..)
   , HostWriter(..), HostMap(..)
   , MonadAppHost(..)
-  , HostHasIO (..)
-  , MonadIOHost (..)
+  , HostHasIO 
+  , MonadIOHost 
   
-  , HasPostBuild (..)
+--   , HasPostBuild (..)
   
   , HostActions
   , Events, Behaviors
@@ -41,20 +42,7 @@ import  Data.Traversable
 
 import Prelude -- Silence AMP warnings
 
--- | Create a new event and return a function that can be used to construct an event
--- trigger with an associated value. Note that this by itself will not fire the event.
--- To fire the event, you still need to use either 'performPostBuild_' or 'getAsyncFire'
--- which can fire these event triggers with an associated value.
---
--- Note that in some cases (such as when there are no listeners), the returned function
--- does return 'Nothing' instead of an event trigger. This does not mean that it will
--- neccessarily return Nothing on the next call too though.
-newEventWithConstructor
-  :: (MonadReflexCreateTrigger t m, MonadIO m) => m (Event t a, a -> IO [DSum (EventTrigger t)])
-newEventWithConstructor = do
-  ref <- liftIO $ newIORef Nothing
-  event <- newEventWithTrigger (\h -> writeIORef ref Nothing <$ writeIORef ref (Just h))
-  return (event, \a -> maybeToList . fmap (:=> a) <$> liftIO (readIORef ref))
+
   
   
    
@@ -69,12 +57,7 @@ newExternalEvent = do
   return (event,  liftIO . fire . liftIO . construct)
 
 
--- newFrameEvent :: (HasPostFrame t m) 
---               => m (Event t a,  a -> IO ())
--- newFrameEvent =  do
---   fire <- askPostFrame
---   (event, construct) <- newEventWithConstructor
---   return (event,  liftIO . fire . liftIO . construct)
+
 
 
 postQuit :: (HasPostAsync t m) => m ()
@@ -101,23 +84,23 @@ performEventAsync event = do
 --
 -- Typical use is sampling from Dynamics/Behaviors and providing the result in an Event
 -- more convenient to use.
-generateEvent ::  (HasPostBuild t m) => HostFrame t a -> m (Event t a)
-generateEvent action = do
-  (event, construct) <- newEventWithConstructor
-  generatePostBuild $ liftIO . construct =<< action
-  return event
-
--- | Provide an event which is triggered directly after the initial setup of the
--- application is completed.
-getPostBuild ::  (HasPostBuild t m) => m (Event t ())
-getPostBuild = generateEvent (return ())
+-- generateEvent ::  (HasPostBuild t m) => HostFrame t a -> m (Event t a)
+-- generateEvent action = do
+--   (event, construct) <- newEventWithConstructor
+--   generatePostBuild $ liftIO . construct =<< action
+--   return event
+-- 
+-- -- | Provide an event which is triggered directly after the initial setup of the
+-- -- application is completed.
+-- getPostBuild ::  (HasPostBuild t m) => m (Event t ())
+-- getPostBuild = generateEvent (return ())
 
  
 
 performAppHost :: MonadAppHost t r m => Event t (m a) -> m (Event t a)
 performAppHost mChanged = do 
   runAppHost <- askRunAppHost
-  updates <- performEvent $ runAppHost <$> mChanged
+  updates <- performHost $ runAppHost <$> mChanged
   holdHost mempty (snd <$> updates) 
   return (fst <$> updates)
 
@@ -127,7 +110,7 @@ holdAppHost :: MonadAppHost t r m => m a -> Event t (m a) -> m (Dynamic t a)
 holdAppHost mInit mChanged = do
   runAppHost <- askRunAppHost
   (a, r) <- collectHost mInit
-  updates <- performEvent $ runAppHost <$> mChanged
+  updates <- performHost $ runAppHost <$> mChanged
   holdHost r (snd <$> updates) 
   holdDyn a (fst <$> updates)
   

@@ -71,7 +71,7 @@ instance (ReflexHost t, Switchable t r, Monoid r, HasHostActions t r) => MonadAp
   
   type Host t (PureHost t r) = M t
   
-  performEvent e = return $ push (fmap Just . unM) e
+  performHost e = return $ push (fmap Just . unM) e
   liftAppHost (M m) = liftHoldPure m
   askRunAppHost = return $ \m -> M (runPureHost m)
   
