@@ -49,6 +49,8 @@ import Prelude -- Silence AMP warnings
 -- Note that in some cases (such as when there are no listeners), the returned function
 -- does return 'Nothing' instead of an event trigger. This does not mean that it will
 -- neccessarily return Nothing on the next call too though.
+
+{-# INLINABLE newEventWithConstructor #-}
 newEventWithConstructor
   :: (MonadReflexCreateTrigger t m, MonadIO m) => m (Event t a, a -> IO [DSum (EventTrigger t)])
 newEventWithConstructor = do
@@ -61,6 +63,8 @@ newEventWithConstructor = do
   
 -- | Create a new event from an external event source. The returned function can be used
 -- to fire the event.
+
+{-# INLINABLE newExternalEvent #-}
 newExternalEvent :: (HasPostAsync t m) 
                  => m (Event t a, a -> IO ())
 newExternalEvent = do
@@ -68,7 +72,7 @@ newExternalEvent = do
   (event, construct) <- newEventWithConstructor
   return (event,  liftIO . fire . liftIO . construct)
 
-
+{-# INLINABLE newFrameEvent #-}
 newFrameEvent :: (HasPostFrame t m) 
               => m (Event t a,  a -> IO ())
 newFrameEvent =  do
@@ -87,6 +91,8 @@ postQuit = do
 -- | Run some IO asynchronously in another thread starting after the frame in which the
 -- input event fires and fire an event with the result of the IO action after it
 -- completed.
+
+{-# INLINABLE performEventAsync #-}
 performEventAsync :: (HasPostAsync t m, HostWriter r m, HasHostActions t r) 
                    => Event t (IO a) -> m (Event t a)
 performEventAsync event = do
@@ -94,7 +100,8 @@ performEventAsync event = do
   performEvent_ $ liftIO <$> (void . forkIO . void . fire =<<) <$> event
   return result
   
-  
+
+{-# INLINABLE performEvent #-}
 performEvent event = do
     (result, fire) <- newFrameEvent
     performEvent_ $ (void . liftIO . fire =<<) <$> event
@@ -106,6 +113,7 @@ performEvent event = do
 --
 -- Typical use is sampling from Dynamics/Behaviors and providing the result in an Event
 -- more convenient to use.
+{-# INLINABLE generateEvent #-}
 generateEvent ::  (HasPostFrame t m) 
               => HostFrame t a -> m (Event t a)
 generateEvent action = do
@@ -116,6 +124,8 @@ generateEvent action = do
 
 -- | Provide an event which is triggered directly after the initial setup of the
 -- application is completed.
+
+{-# INLINABLE getPostBuild #-}
 getPostBuild ::  (HasPostFrame t m) 
              => m (Event t ())
 getPostBuild = generateEvent (return ())

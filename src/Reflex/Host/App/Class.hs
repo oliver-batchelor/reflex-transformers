@@ -99,10 +99,11 @@ newtype HostActions t = HostActions { unHostAction ::  Events t (Traversal (Host
 instance ReflexHost t => Switchable t (HostActions t) where
     genericSwitch es updated = HostActions <$> genericSwitch (unHostAction es) (unHostAction <$> updated)
 
-      
+{-# INLINABLE hostAction #-}      
 hostAction :: Reflex t => Event t (HostFrame t ()) -> HostActions t
 hostAction e = HostActions $ Events [Traversal <$> e]
       
+{-# INLINABLE mergeHostActions #-}      
 mergeHostActions :: (ReflexHost t) => HostActions t -> Event t (HostFrame t ())
 mergeHostActions (HostActions e) = getTraversal <$> mergeEvents e
 
@@ -122,7 +123,7 @@ class HasHostActions t r | r -> t where
 instance HasHostActions t (HostActions t) where
   fromActions = id
  
- 
+{-# INLINABLE performEvent_ #-} 
 performEvent_ :: (Reflex t, HostWriter r m, HasHostActions t r) =>  Event t (HostFrame t ()) -> m ()
 performEvent_  = tellHost . fromActions . hostAction
       
