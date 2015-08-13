@@ -117,8 +117,8 @@ main = defaultMain
   ]
   
   where
-    n = 50
-    b = 10
+    n = 100
+    b = 20
   
   
 runTest :: IOHost Spider (HostActions Spider) () -> IO ()
