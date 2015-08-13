@@ -95,9 +95,10 @@ listWithKey d view =  do
 dummyView :: MonadIOHost t r m => Dynamic t a -> m ()  
 dummyView d = do
   
-  schedulePostBuild $ do
-      sample (current d)
-      return ()
+  schedulePostBuild $ sample (current d) >> return ()
+  schedulePostBuild $ sample (current d) >> return ()
+  schedulePostBuild $ sample (current d) >> return ()
+  schedulePostBuild $ sample (current d) >> return ()
       
   performEvent_ $ ffor (updated d) $ \a -> return ()
   performEvent_ $ ffor (updated d) $ \a -> return ()
