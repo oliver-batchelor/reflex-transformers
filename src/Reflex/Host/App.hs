@@ -6,7 +6,7 @@ module Reflex.Host.App
   , newEventWithConstructor, newExternalEvent
   , performEventAndTrigger_, performEvent_, performEvent
   , switchAppHost, performAppHost, dynAppHost, holdAppHost
-  , getPostBuild, performPostBuild, performEventAsync
+  , getPostBuild, performPostBuild, performEventAsync  
   , MonadAppHost(..), AppHost()
   , AppInfo(..), infoPerform, infoQuit, infoFire, switchAppInfo
   ) where

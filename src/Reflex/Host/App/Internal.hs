@@ -9,6 +9,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ImpredicativeTypes #-}
+
 -- | Module exposing the internal implementation of the host monad.
 -- There is no guarrante about stability of this module.
 -- If possible, use 'Reflex.Host.App' instead.
