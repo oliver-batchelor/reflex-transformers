@@ -39,15 +39,14 @@ $(makePrisms ''Diff)
 -- schedulePostBuild action = performPostBuild_ $ action >> pure mempty
 
 
-switchActions :: (MonadAppHost t m, Functor f, Foldable f) => Event t (f (HostFrame t (AppInfo t))) -> m ()
-switchActions info = void $ performAppHost $ performPostBuild_ <$> getApp . foldMap id . fmap Ap <$> info
--- 
---   
---   
---   
--- runAppHost :: MonadAppHost t m => m a -> m (HostFrame t (AppInfo t), a)
--- runAppHost action = liftHostFrame . ($ action) =<< getRunAppHost   
-   
+switchActions :: (MonadAppHost t m, Functor f, Foldable f) => f (AppInfo t) -> Event t (f (AppInfo t)) -> m ()
+switchActions initial info = do
+  actions <- switchPromptly (merge initial) $ merge <$> info
+  performEvent_ actions
+  
+  where
+    merge = mergeWith (>>) . toList
+
    
    
 holdMap :: (MonadAppHost t m, Ord k) => Map k a -> Event t (Map k (Diff a)) -> m (Dynamic t (Map k a))
@@ -78,6 +77,7 @@ domList input  = do
 
   viewChanges <- performEvent $ mapMOf (traverse . _Added) run <$> changes
   views <- holdMap initial viewChanges
+  
   
   switchActions (fst <$> initial) (fmap fst <$> updated views)
   mapDyn (fmap snd) views
@@ -170,19 +170,19 @@ setup initial =  do
 testAdd :: (MonadAppHost t m) => Int -> m ()
 testAdd n = do
   (add, remove) <- setup mempty
-  forM_ [1..n] $ \i -> add (item i)
+  liftIO $ forM_ [1..n] $ \i -> add (item i)
   
   
 testModify :: (MonadAppHost t m) => Int -> m ()
 testModify n = do
   (add, remove) <- setup (makeItems n)
-  forM_ [1..n] $ \i ->  add (item i)  
+  liftIO $ forM_ [1..n] $ \i ->  add (item i)  
   
 
 testBulk :: (MonadAppHost t m) => Int -> Int -> m ()
 testBulk n b = do
   (add, remove) <- setup mempty
-  forM_ [1..n] $ const $ do 
+  liftIO $ forM_ [1..n] $ const $ do 
     add $ makeItems b
     remove $ (const () <$> makeItems b)
   
@@ -198,6 +198,6 @@ item i = Map.singleton i (True, "item " ++ show i)
 testRemove :: (MonadAppHost t m) => Int -> m ()
 testRemove n = do
   (add, remove) <- setup (makeItems n)
-  forM_ [1..n] $ \i ->  remove $ Map.singleton i ()
+  liftIO $ forM_ [1..n] $ \i ->  remove $ Map.singleton i ()
   
     
