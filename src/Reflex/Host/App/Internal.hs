@@ -114,16 +114,18 @@ readFrames env =  do
 -- This function will block until the application exits (when one of the 'eventsToQuit'
 -- fires).
 hostApp :: (ReflexHost t, MonadIO m, MonadReflexHost t m) => AppHost t () -> m ()
-hostApp app = do
-  (chan, step) <- initHostApp app 
-  forever $ liftIO (readChan chan) >>= step
+hostApp app = loop =<< initHostApp app where
+  
+  loop (chan, step) = do
+    inputs <- liftIO (readChan chan) >>= runHostFrame
+    unless (null inputs) $ step inputs >> loop (chan, step)  
 
 -- | Initialize the application using a 'AppHost' monad. This function enables use
 -- of use an external control loop. It returns a step function to step the application
 -- based on external inputs received through the channel.
 -- The step function returns False when one of the 'eventsToQuit' is fired.
 initHostApp :: (ReflexHost t, MonadIO m, MonadReflexHost t m)
-            => AppHost t () -> m (Chan (AppInputs t), AppInputs t -> m ())
+            => AppHost t () -> m (Chan (AppInputs t), [DSum (EventTrigger t)] -> m ())
 initHostApp app = do
   env <- liftIO $ AppEnv <$> newChan <*> newIORef []
   
@@ -142,7 +144,7 @@ initHostApp app = do
     eventValue = readEvent >=> T.sequenceA
 
   go =<< readFrames env
-  return (envEventChan env, go <=< runHostFrame)
+  return (envEventChan env, go)
 --------------------------------------------------------------------------------
 
 -- | Class providing common functionality for implementing reflex frameworks.

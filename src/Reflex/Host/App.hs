@@ -6,7 +6,10 @@ module Reflex.Host.App
   , newExternalEvent, performEvent_, performEvent
   , getPostBuild, performEventAsync
   , schedulePostBuild, performPostBuild
+  , runAppHost, postQuit
   , MonadAppHost(..), AppHost(), AppInfo
+  , performAppHost, switchAppHost, holdAppHost
+  
   ) where
 
 import Control.Applicative
@@ -99,6 +102,10 @@ getPostBuild :: (MonadAppHost t m) =>  m (Event t ())
 getPostBuild = performPostBuild (return ())
 
 
+postQuit :: (MonadAppHost t m) => m ()
+postQuit = do
+  fire <- getPostAsync
+  liftIO $ fire (return [])
 
 -- | Run an action in a 'MonadAppHost' monad, but do not register the 'AppInfo' for this
 -- action nor its postBuild actions.

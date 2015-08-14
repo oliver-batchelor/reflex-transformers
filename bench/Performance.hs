@@ -35,25 +35,18 @@ $(makePrisms ''Diff)
   
 
   
-schedulePostBuild ::  (MonadAppHost t m) => HostFrame t () -> m ()
-schedulePostBuild action = performPostBuild_ $ action >> pure mempty
+-- schedulePostBuild ::  (MonadAppHost t m) => HostFrame t () -> m ()
+-- schedulePostBuild action = performPostBuild_ $ action >> pure mempty
 
 
-switchActions :: (MonadAppHost t m, Functor f, Foldable f) => f (HostFrame t (AppInfo t)) -> Event t (f (HostFrame t (AppInfo t))) -> m ()
-switchActions initial info = do    
-  event <- performEvent $ concatInfo <$> info
-  performPostBuild_ $ do
-    info <- concatInfo initial
-    switchAppInfo info event
-  
-  where 
-    concatInfo = getApp . fold . fmap Ap
-
-  
-  
-  
-runAppHost :: MonadAppHost t m => m a -> m (HostFrame t (AppInfo t), a)
-runAppHost action = liftHostFrame . ($ action) =<< getRunAppHost   
+switchActions :: (MonadAppHost t m, Functor f, Foldable f) => Event t (f (HostFrame t (AppInfo t))) -> m ()
+switchActions info = void $ performAppHost $ performPostBuild_ <$> getApp . foldMap id . fmap Ap <$> info
+-- 
+--   
+--   
+--   
+-- runAppHost :: MonadAppHost t m => m a -> m (HostFrame t (AppInfo t), a)
+-- runAppHost action = liftHostFrame . ($ action) =<< getRunAppHost   
    
    
    
@@ -138,13 +131,6 @@ main = defaultMain
     n = 100
     b = 20
   
-postQuit :: (MonadAppHost t m) => m () 
-postQuit = do
-  postBuild <- getPostBuild
-  e <- performEventAsync $ return <$> postBuild
-  
-  performPostBuild_ . pure . infoQuit . pure $ e
-  
    
   
 runTest :: AppHost Spider () -> IO ()
@@ -180,28 +166,23 @@ setup initial =  do
   return (void . fireAdd, void . fireRemove)
   
   
--- Hack so that events fired are subscribed at time of firing
-delay :: (MonadAppHost t m) => IO () ->  m ()
-delay io = do
-  pb <- getPostBuild
-  performEvent_ $ ffor pb $ \_ -> liftIO io
-  
+ 
 testAdd :: (MonadAppHost t m) => Int -> m ()
 testAdd n = do
   (add, remove) <- setup mempty
-  delay $ forM_ [1..n] $ \i -> add (item i)
+  forM_ [1..n] $ \i -> add (item i)
   
   
 testModify :: (MonadAppHost t m) => Int -> m ()
 testModify n = do
   (add, remove) <- setup (makeItems n)
-  delay $ forM_ [1..n] $ \i ->  add (item i)  
+  forM_ [1..n] $ \i ->  add (item i)  
   
 
 testBulk :: (MonadAppHost t m) => Int -> Int -> m ()
 testBulk n b = do
   (add, remove) <- setup mempty
-  delay $ forM_ [1..n] $ const $ do
+  forM_ [1..n] $ const $ do 
     add $ makeItems b
     remove $ (const () <$> makeItems b)
   
@@ -217,6 +198,6 @@ item i = Map.singleton i (True, "item " ++ show i)
 testRemove :: (MonadAppHost t m) => Int -> m ()
 testRemove n = do
   (add, remove) <- setup (makeItems n)
-  delay $ forM_ [1..n] $ \i ->  remove $ Map.singleton i ()
+  forM_ [1..n] $ \i ->  remove $ Map.singleton i ()
   
     
