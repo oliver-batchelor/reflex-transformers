@@ -36,8 +36,8 @@ instance (Switchable t a, Switchable t b) => Switchable t (a, b) where
   genericSwitch (a, b) e = liftM2 (,) (genericSwitch a $ fst <$> e) (genericSwitch b $ snd <$> e)
 
 
-newtype Behaviors t a = Behaviors { unBehaviors :: [Behavior t a] } deriving Monoid
-newtype Events t a = Events { unEvents :: [Event t a] } deriving Monoid
+newtype Behaviors t a = Behaviors { unBehaviors :: DList (Behavior t a) } deriving Monoid
+newtype Events t a = Events { unEvents :: DList (Event t a) } deriving Monoid
 
 instance (Monoid a, Reflex t) => Switchable t (Behaviors t a)  where
   {-# INLINEABLE genericSwitch #-}
@@ -49,11 +49,11 @@ instance (Monoid a, Reflex t) => Switchable t (Events t a) where
   
 {-# INLINEABLE mergeEvents #-}
 mergeEvents :: (Reflex t, Monoid a) => Events t a -> Event t a
-mergeEvents = mergeWith mappend . unEvents
+mergeEvents = mergeWith mappend . DL.toList . unEvents
 
 {-# INLINEABLE mergeBehaviors #-}
 mergeBehaviors :: (Reflex t, Monoid a) => Behaviors t a -> Behavior t a
-mergeBehaviors = mconcat . unBehaviors
+mergeBehaviors = mconcat . DL.toList . unBehaviors
 
   
 class (Monad m, Monoid r) => HostWriter r m | m -> r  where  
@@ -115,22 +115,29 @@ instance ReflexHost t => Monoid (HostActions t) where
   mempty = HostActions mempty mempty
   mappend (HostActions p t) (HostActions p' t') = HostActions (mappend p p') (mappend t t')
   
+  
+events :: Event t a -> Events t a
+events = Events . pure
+
+behaviors :: Behavior t a -> Behaviors t a
+behaviors = Behaviors . pure
+  
 instance ReflexHost t => Switchable t (HostActions t) where
     genericSwitch (HostActions perform postBuild) updated = do
       updatedPerform <- genericSwitch perform (hostPerform <$> updated)
       return (HostActions (updatedPostBuild `mappend` updatedPerform) postBuild)
       
       where
-        updatedPostBuild = Events [hostPostBuild <$> updated]
+        updatedPostBuild = events (hostPostBuild <$> updated)
       
 
 {-# INLINEABLE makePerform_ #-}
 makePerform_ :: ReflexHost t => Event t (HostFrame t ()) -> HostActions t
-makePerform_ e = mempty { hostPerform = Events [Ap . fmap (const mempty) <$> e] }
+makePerform_ e = mempty { hostPerform = events $ Ap . fmap (const mempty) <$> e }
 
 {-# INLINEABLE makePerform #-}
 makePerform :: ReflexHost t => Event t (HostFrame t (DList (DSum (EventTrigger t)))) -> HostActions t
-makePerform e = mempty { hostPerform = Events [Ap <$> e] }
+makePerform e = mempty { hostPerform = events $ Ap <$> e }
 
 {-# INLINEABLE makePostBuild #-}
 makePostBuild :: ReflexHost t => HostFrame t (DList (DSum (EventTrigger t))) -> HostActions t
