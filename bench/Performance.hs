@@ -12,11 +12,11 @@ import Data.Functor
 import Data.Monoid ((<>))
 import Data.Maybe (catMaybes)
 import Control.Concurrent
-import Control.Lens
+import Control.Lens hiding (Traversal)
 
 import Data.Tuple
 import Data.Semigroup.Applicative
-
+import Control.Applicative
 
 import Reflex
 import Reflex.Host.Class
@@ -45,7 +45,8 @@ switchActions initial info = do
   performEvent_ actions
   
   where
-    merge = mergeWith (>>) . toList
+    merge = mergeWith (liftA2 mappend) . toList
+--     merge =  fmap getApp . mconcat . toList . fmap (fmap Ap)
 
    
    
