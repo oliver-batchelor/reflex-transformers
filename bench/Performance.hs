@@ -41,8 +41,16 @@ schedulePostBuild action = performPostBuild_ $ action >> pure mempty
 
 switchActions :: (MonadAppHost t m, Functor f, Foldable f) => f (HostFrame t (AppInfo t)) -> Event t (f (HostFrame t (AppInfo t))) -> m ()
 switchActions initial info = do    
-  event <- performEvent $ getApp . fold . fmap Ap <$> info
-  performPostBuild_ $ switchAppInfo mempty event
+  event <- performEvent $ concatInfo <$> info
+  performPostBuild_ $ do
+    info <- concatInfo initial
+    switchAppInfo info event
+  
+  where 
+    concatInfo = getApp . fold . fmap Ap
+
+  
+  
   
 runAppHost :: MonadAppHost t m => m a -> m (HostFrame t (AppInfo t), a)
 runAppHost action = liftHostFrame . ($ action) =<< getRunAppHost   
@@ -94,7 +102,7 @@ listWithKey d view =  do
     itemView k v = holdDyn v (fmapMaybe (Map.lookup k) (updated d)) >>= view k
   
 
-dummyView :: MonadAppHost t m => Dynamic t a -> m ()  
+dummyView :: (MonadAppHost t m, Show a) => Dynamic t a -> m ()  
 dummyView d = do
   
   schedulePostBuild $ sample (current d) >> return ()
@@ -127,8 +135,8 @@ main = defaultMain
   ]
   
   where
-    n = 50
-    b = 10
+    n = 100
+    b = 20
   
 postQuit :: (MonadAppHost t m) => m () 
 postQuit = do
