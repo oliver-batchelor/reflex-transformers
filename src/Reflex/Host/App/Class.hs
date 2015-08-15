@@ -11,6 +11,7 @@ import Reflex.Host.Class
 
 import Control.Monad
 import Control.Monad.State.Strict
+import Control.Applicative
 import Data.Semigroup.Applicative
 import Data.Semigroup
 import Data.Maybe
@@ -37,12 +38,12 @@ newtype Events t a = Events { unEvents :: [Event t a] } deriving Monoid
 instance (Monoid a, Reflex t) => Switchable t (Behaviors t a)  where
   genericSwitch bs updated = Behaviors . pure <$> switcher (mergeBehaviors bs) (mergeBehaviors <$> updated)
       
-instance (Semigroup a, Reflex t) => Switchable t (Events t a) where
+instance (Monoid a, Reflex t) => Switchable t (Events t a) where
   genericSwitch es updated = Events . pure <$> switchPromptly (mergeEvents es) (mergeEvents <$> updated)
   
   
-mergeEvents :: (Reflex t, Semigroup a) => Events t a -> Event t a
-mergeEvents = mconcat . unEvents
+mergeEvents :: (Reflex t, Monoid a) => Events t a -> Event t a
+mergeEvents = mergeWith mappend . unEvents 
 
 mergeBehaviors :: (Reflex t, Monoid a) => Behaviors t a -> Behavior t a
 mergeBehaviors = mconcat . unBehaviors
@@ -93,19 +94,27 @@ class (Reflex t, MonadFix m, MonadHold t m, MonadHold t (Host t m), MonadFix (Ho
 class (ReflexHost t, MonadIO m, MonadIO (HostFrame t), MonadFix (HostFrame t), 
        MonadReflexCreateTrigger t m) => HostHasIO t m | m -> t 
   
+     
   
-newtype HostActions t = HostActions { unHostAction ::  Events t (Traversal (HostFrame t)) }  deriving (Monoid)
+newtype HostActions t = HostActions { unHostAction ::  [Event t (HostFrame t ())] }  deriving Monoid
 
-instance ReflexHost t => Switchable t (HostActions t) where
-    genericSwitch es updated = HostActions <$> genericSwitch (unHostAction es) (unHostAction <$> updated)
-
-{-# INLINABLE hostAction #-}      
-hostAction :: Reflex t => Event t (HostFrame t ()) -> HostActions t
-hostAction e = HostActions $ Events [Traversal <$> e]
       
 {-# INLINABLE mergeHostActions #-}      
 mergeHostActions :: (ReflexHost t) => HostActions t -> Event t (HostFrame t ())
-mergeHostActions (HostActions e) = getTraversal <$> mergeEvents e
+mergeHostActions (HostActions e) = mergeWith (>>) e
+
+instance (ReflexHost t) => Switchable t (HostActions t) where
+  genericSwitch es updated = HostActions . pure <$> switchPromptly (mergeHostActions es) (mergeHostActions <$> updated)
+  
+  
+{-
+instance ReflexHost t => Switchable t (HostActions t) where
+    genericSwitch es updated = HostActions <$> genericSwitch (unHostAction es) (unHostAction <$> updated)-}
+
+{-# INLINABLE hostAction #-}      
+hostAction :: Reflex t => Event t (HostFrame t ()) -> HostActions t
+hostAction e = HostActions $ [e]
+
 
       
 class (HostHasIO t m) => HasPostFrame t m | m -> t where

@@ -32,17 +32,6 @@ data Diff a = Added a | Removed deriving (Show, Functor)
 $(makePrisms ''Diff)
   
 
-  
--- schedulePostBuild ::  (MonadAppHost t m) => HostFrame t () -> m ()
--- schedulePostBuild action = performPostBuild_ $ action >> pure mempty
--- 
--- 
--- switchActions :: (MonadAppHost t m, Functor f, Foldable f) => Event t (f (HostFrame t (AppInfo t))) -> m ()
--- switchActions info = do    
---   event <- performEvent $ getApp . foldMap id . fmap Ap <$> info
---   performPostBuild_ $ switchAppInfo mempty event
-
-  
    
    
 holdMap :: (MonadAppHost t r m, Ord k) => Map k a -> Event t (Map k (Diff a)) -> m (Dynamic t (Map k a))
