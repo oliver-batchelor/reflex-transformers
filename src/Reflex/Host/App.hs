@@ -7,8 +7,8 @@ module Reflex.Host.App
   , getPostBuild, performEventAsync
   , schedulePostBuild, performPostBuild
   , runAppHost, postQuit
-  , MonadAppHost(..), AppHost(), AppInfo
-  , performAppHost, switchAppHost, holdAppHost
+  , MonadAppHost(..), AppHost(), HostActions
+--   , performAppHost, switchAppHost, holdAppHost
   
   ) where
 
@@ -113,7 +113,7 @@ postQuit = do
 --
 -- For example, all 'performEvent_' calls inside the passed action will not actually be
 -- performed, as long as the returned 'AppInfo' is not registered manually.
-runAppHost :: MonadAppHost t m => m a -> m (AppInfo t, a)
+runAppHost :: MonadAppHost t m => m a -> m (HostActions t, a)
 runAppHost action = liftHostFrame . ($ action) =<< getRunAppHost
 
 -- | Switch to a different host action after an event fires. Only the 'AppInfo' of the
@@ -126,21 +126,21 @@ runAppHost action = liftHostFrame . ($ action) =<< getRunAppHost
 --
 -- Whenever a switch to a new host action happens, the returned event is fired in the
 -- next frame with the result of running it.
-switchAppHost :: MonadAppHost t m => AppInfo t -> Event t (m a) -> m (Event t a)
-switchAppHost initial event = do
-  run <- getRunAppHost
-  (infoEvent, valueEvent) <- fmap splitE . performEvent $ run <$> event  
-  performEvent_ =<< switchPromptly initial infoEvent
-  return valueEvent
+-- switchAppHost :: MonadAppHost t m => AppInfo t -> Event t (m a) -> m (Event t a)
+-- switchAppHost initial event = do
+--   run <- getRunAppHost
+--   (infoEvent, valueEvent) <- fmap splitE . performEvent $ run <$> event  
+--   performEvent_ =<< switchPromptly initial infoEvent
+--   return valueEvent
+-- -- 
+-- -- -- | Like 'switchAppHost', but without an initial action.
+-- performAppHost :: MonadAppHost t m => Event t (m a) -> m (Event t a)
+-- performAppHost = switchAppHost never
 -- 
--- -- | Like 'switchAppHost', but without an initial action.
-performAppHost :: MonadAppHost t m => Event t (m a) -> m (Event t a)
-performAppHost = switchAppHost never
-
--- -- | Like 'switchAppHost', but taking the initial postBuild action from another host
--- -- action.
-holdAppHost :: MonadAppHost t m => m a -> Event t (m a) -> m (Dynamic t a)
-holdAppHost mInit mChanged = do
-  (postActions, aInit) <- runAppHost mInit
-  aChanged <- switchAppHost postActions mChanged
-  holdDyn aInit aChanged
+-- -- -- | Like 'switchAppHost', but taking the initial postBuild action from another host
+-- -- -- action.
+-- holdAppHost :: MonadAppHost t m => m a -> Event t (m a) -> m (Dynamic t a)
+-- holdAppHost mInit mChanged = do
+--   (postActions, aInit) <- runAppHost mInit
+--   aChanged <- switchAppHost postActions mChanged
+--   holdDyn aInit aChanged

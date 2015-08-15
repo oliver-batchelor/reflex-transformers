@@ -39,14 +39,9 @@ $(makePrisms ''Diff)
 -- schedulePostBuild action = performPostBuild_ $ action >> pure mempty
 
 
-switchActions :: (MonadAppHost t m, Functor f, Foldable f) => f (AppInfo t) -> Event t (f (AppInfo t)) -> m ()
-switchActions initial info = do
-  latest <- hold (merge initial) (merge <$> info)
-  performEvent_ $ switch latest
-  
-  where
-    merge = mergeWith (liftA2 mappend) . toList
---     merge =  fmap getApp . mconcat . toList . fmap (fmap Ap)
+-- switchActionsF :: (MonadAppHost t m, Functor f, Foldable f) => f (HostActions t) -> Event t (f (HostActions t)) -> m ()
+-- switchActionsF initial updates = do
+--   performEvent_ $ switchActions (mconcat initial) (mconcat <$> updates) 
 
    
    
@@ -80,7 +75,7 @@ domList input  = do
   views <- holdMap initial viewChanges
   
   
-  switchActions (fst <$> initial) (fmap fst <$> updated views)
+  holdActions (fold $ fst <$> initial) (fold . fmap fst <$> updated views)
   mapDyn (fmap snd) views
   
   

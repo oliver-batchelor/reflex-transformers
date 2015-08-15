@@ -29,6 +29,10 @@ import Reflex.Class hiding (constant)
 import Reflex.Host.Class
 import Data.IORef
 import Data.Tuple
+import qualified Data.DList as DL
+import Data.DList (DList)
+
+import Data.Monoid
 
 
 import Control.Lens
@@ -42,7 +46,7 @@ import qualified Data.Traversable as T
 --   these are stored in a channel to be processed by the application.
 type AppInputs t = HostFrame t [DSum (EventTrigger t)]
 
-type AppInfo t = Event t (HostFrame t ())
+-- type AppInfo t = Event t (HostFrame t ())
 
 -- | This is the environment in which the app host monad runs.
 data AppEnv t = AppEnv
@@ -60,19 +64,49 @@ data AppEnv t = AppEnv
 -- For more information about this type, see the field 'eventsToPerform' of 'AppInfo'.
 
 
-data AppState t = AppState 
-  { _appPostBuild  :: !(HostFrame t ())
-  , _appPerform    :: ![Event t (HostFrame t ())]
-  }
 
-$(makeLenses ''AppState)  
+-- data AppState t = AppState 
+--   { _appPostBuild  :: !(HostFrame t ())
+--   , _appPerform    :: ![Event t (HostFrame t ())]
+--   }
+
+type HostAction t = HostFrame t (DList (DSum (EventTrigger t)))
+-- type ApHostAction t = Ap (HostFrame t) (DList (DSum (EventTrigger t)))
+
+
+
+data HostActions t = HostActions 
+  { _hostPerform   :: ![Event t (HostAction t)] 
+  , _hostPostBuild :: !(HostAction t)
+  }   
+
+
+instance ReflexHost t => Monoid (HostActions t) where
+  mempty = HostActions mempty (return DL.empty)
+  mappend (HostActions p pb) (HostActions p' pb') = HostActions (p <> p') (liftA2 (<>) pb pb')
+  
+  
+mergeActions :: ReflexHost t => [Event t (HostAction t)] -> Event t (HostAction t)
+mergeActions = mergeWith (liftA2 (<>))
+
+switchActions :: (MonadHold t m, ReflexHost t) => HostActions t -> Event t (HostActions t) -> m (HostActions t)
+switchActions (HostActions perform postBuild) updates = do
+  latest <- hold (mergeActions perform) (mergeActions . _hostPerform <$> updates)
+  return (HostActions [updatedPostBuild, switch latest] postBuild)
+    where
+      updatedPostBuild = _hostPostBuild <$> updates  
+
+
+      
+
+$(makeLenses ''HostActions)  
 --------------------------------------------------------------------------------
 
 -- | An implementation of the 'MonadAppHost' typeclass. You should not need to use this
 -- type directly. Instead, use the methods provided by the 'MonadAppHost' typeclass and
 -- then run your application using 'hostApp' to choose this implementation.
 newtype AppHost t a = AppHost
-  { unAppHost :: ReaderT (AppEnv t) (StateT (AppState t) (HostFrame t))  a
+  { unAppHost :: ReaderT (AppEnv t) (StateT (HostActions t) (HostFrame t))  a
   }
 
 instance (Reflex t, MonadReflexCreateTrigger t m) => MonadReflexCreateTrigger t (StateT s m) where
@@ -92,15 +126,13 @@ deriving instance ReflexHost t => MonadFix (AppHost t)
 
 -- | Run the application host monad in a reflex host frame and return the produced
 -- application info.
-runAppHostFrame :: ReflexHost t => AppEnv t -> AppHost t a -> HostFrame t (a, AppInfo t)
-runAppHostFrame env app = do 
-  (a, state) <- flip runStateT initial . flip runReaderT env .  unAppHost $ app
-  _appPostBuild state
-  return $ (a, mergeWith (>>) (_appPerform state))
+runAppHostFrame :: ReflexHost t => AppEnv t -> AppHost t a -> HostFrame t (a, HostActions t)
+runAppHostFrame env app = flip runStateT initial . flip runReaderT env .  unAppHost $ app
+  where initial = HostActions [] (pure (DL.empty))
+
   
-  where initial = AppState (pure ()) []
-        
-execAppHostFrame :: ReflexHost t => AppEnv t -> AppHost t () -> HostFrame t (AppInfo t)
+  
+execAppHostFrame :: ReflexHost t => AppEnv t -> AppHost t () -> HostFrame t (HostActions t)
 execAppHostFrame env app = snd <$> runAppHostFrame env app
 
 readFrames :: (ReflexHost t, MonadIO m, MonadReflexHost t m) =>  AppEnv t -> m [DSum (EventTrigger t)]
@@ -129,8 +161,8 @@ initHostApp :: (ReflexHost t, MonadIO m, MonadReflexHost t m)
 initHostApp app = do
   env <- liftIO $ AppEnv <$> newChan <*> newIORef []
   
-  toPerform <- runHostFrame $ execAppHostFrame env app
-  nextActionEvent <- subscribeEvent toPerform
+  hostActions <- runHostFrame $ execAppHostFrame env app
+  nextActionEvent <- subscribeEvent (mergeActions . _hostPerform $ hostActions)
 
   let
     go [] = return ()
@@ -190,7 +222,7 @@ class (ReflexHost t, MonadSample t m, MonadHold t m, MonadReflexCreateTrigger t 
   -- @m a -> HostFrame t (HostFrame t (AppInfo t), a)@.
   -- Executing outermost @HostFrame t@ will only perform step 1. The inner layer will
   -- then perform step 2, and the returned 'AppInfo' represents step 3.
-  getRunAppHost :: m (m a -> HostFrame t (AppInfo t, a))
+  getRunAppHost :: m (m a -> HostFrame t (HostActions t, a))
 
   -- | Run an action after all other actions have been ran and add information about the
   -- application. After the host monad's actions have been executed, actions registered
@@ -206,10 +238,17 @@ class (ReflexHost t, MonadSample t m, MonadHold t m, MonadReflexCreateTrigger t 
   
   schedulePostBuild :: HostFrame t () -> m ()
   
+  
+  performHost ::  HostActions t -> m ()
+  
 
   -- | Directly run a HostFrame action in the host app monad.
   liftHostFrame :: HostFrame t a -> m a
 
+
+voidAction :: (Functor f) => f () -> f (DList a)
+voidAction a = const DL.empty <$> a
+  
 -- | 'AppHost' is an implementation of 'MonadAppHost'.
 instance (ReflexHost t, MonadIO (HostFrame t)) => MonadAppHost t (AppHost t) where
   getPostAsync = AppHost $ do
@@ -220,12 +259,18 @@ instance (ReflexHost t, MonadIO (HostFrame t)) => MonadAppHost t (AppHost t) whe
     eventsFrameRef <- envEventFrame <$> ask
     return $ \e -> liftIO $ modifyIORef eventsFrameRef (e:)
 
-  
+
   getRunAppHost = do
     env <- AppHost ask
     pure $ fmap swap . runAppHostFrame env
     
-  performEvent_ event = AppHost $ appPerform %= (event:) 
-  schedulePostBuild action = AppHost $ appPostBuild %= (>>action) 
+  performEvent_ event = AppHost $ hostPerform %= ((voidAction <$> event) :) 
+  schedulePostBuild action = AppHost $ hostPostBuild %= (>> (voidAction $ action)) 
+  
+  performHost actions = AppHost $ modify (actions <>)
   
   liftHostFrame = AppHost . lift . lift
+
+  
+holdActions :: (MonadAppHost t m) => HostActions t -> Event t (HostActions t) -> m ()
+holdActions initial updates = performHost =<< switchActions initial updates
