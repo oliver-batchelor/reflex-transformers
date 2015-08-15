@@ -41,7 +41,7 @@ benchmark bench-builder-all
                     mtl,
                     lens
                     
-  ghc-options:      -O2    
+  ghc-options:      -O2 -funbox-strict-fields   
   
   
 library
