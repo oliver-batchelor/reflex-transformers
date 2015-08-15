@@ -85,23 +85,17 @@ dummyView :: MonadIOHost t r m => Dynamic t a -> m ()
 dummyView d = do
   
   schedulePostBuild $ sample (current d) >> return ()
-  schedulePostBuild $ sample (current d) >> return ()
-  schedulePostBuild $ sample (current d) >> return ()
-  schedulePostBuild $ sample (current d) >> return ()
-      
   performEvent_ $ ffor (updated d) $ \a -> return ()
-  performEvent_ $ ffor (updated d) $ \a -> return ()
-  performEvent_ $ ffor (updated d) $ \a -> return ()
-  performEvent_ $ ffor (updated d) $ \a -> return ()
-  
 
   
+
 main :: IO ()
 main = defaultMain 
-  [ bench ("add 1 x " ++ show n) $ nfIO (runTest $ testAdd n)
-  , bench ("modify 1 x " ++ show n) $ nfIO (runTest $ testModify n)
-  , bench ("add/remove " ++ show n ++ " x " ++ show b) $ nfIO (runTest $ testBulk n b)
-  , bench ("remove 1 x " ++ show n) $ nfIO (runTest $ testRemove n)
+  [ bench ("add 1 x " ++ show n) $ nfIO (runTest $ testAdd 1 n)
+  ,  bench ("add (v = 4) 1 x " ++ show n) $ nfIO (runTest $ testAdd 4 n)
+--   , bench ("modify 1 x " ++ show n) $ nfIO (runTest $ testModify n)
+--   , bench ("add/remove " ++ show n ++ " x " ++ show b) $ nfIO (runTest $ testBulk n b)
+--   , bench ("remove 1 x " ++ show n) $ nfIO (runTest $ testRemove n)
   ]
   
   where
@@ -119,8 +113,8 @@ runTest test = runSpiderHost . hostApp $ do
 type Item = (Bool, String)
 
 
-setup :: (MonadIOHost t r m) => Map Int Item -> m (Map Int Item -> IO (), Map Int () -> IO ())
-setup initial =  do
+setup :: (MonadIOHost t r m) => Int -> Map Int Item -> m (Map Int Item -> IO (), Map Int () -> IO ())
+setup numViews initial =  do
     
   (addItem, fireAdd) <-  newExternalEvent
   (removeItem, fireRemove) <-  newExternalEvent
@@ -134,27 +128,28 @@ setup initial =  do
     
   listWithKey items $ \k v -> do
     (enabled, str) <- splitDyn v
-    dummyView enabled
-    dummyView str
+    replicateM numViews $ do
+      dummyView enabled
+      dummyView str
     
   return (fireAdd, fireRemove)
   
   
-testAdd :: (MonadIOHost t r m) => Int -> m ()
-testAdd n = do
-  (add, remove) <- setup mempty
+testAdd :: (MonadIOHost t r m) => Int -> Int -> m ()
+testAdd v n = do
+  (add, remove) <- setup v mempty
   liftIO $ forM_ [1..n] $ \i ->  add $ item i
   
   
-testModify :: (MonadIOHost t r m) => Int -> m ()
-testModify n = do
-  (add, remove) <- setup (makeItems n)
+testModify :: (MonadIOHost t r m) => Int -> Int -> m ()
+testModify v n = do
+  (add, remove) <- setup v (makeItems n)
   liftIO $ forM_ [1..n] $ \i ->  add $ item i  
   
 
-testBulk :: (MonadIOHost t r m) => Int -> Int -> m ()
-testBulk n b = do
-  (add, remove) <- setup mempty
+testBulk :: (MonadIOHost t r m) => Int -> Int -> Int -> m ()
+testBulk v n b = do
+  (add, remove) <- setup v mempty
   liftIO $ forM_ [1..n] $ const $ do
     add $ makeItems b
     remove $ (const () <$> makeItems b)
@@ -168,9 +163,9 @@ item i = Map.singleton i (True, "item " ++ show i)
   
   
   
-testRemove :: (MonadIOHost t r m) => Int -> m ()
-testRemove n = do
-  (add, remove) <- setup (makeItems n)
+testRemove :: (MonadIOHost t r m) => Int -> Int -> m ()
+testRemove v n = do
+  (add, remove) <- setup v (makeItems n)
   forM_ [1..n] $ \i -> liftIO $ remove $ Map.singleton i ()
   postQuit
   
