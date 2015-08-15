@@ -65,14 +65,10 @@ data AppEnv t = AppEnv
 
 
 
--- data AppState t = AppState 
---   { _appPostBuild  :: !(HostFrame t ())
---   , _appPerform    :: ![Event t (HostFrame t ())]
---   }
 
-type HostAction t = HostFrame t (DList (DSum (EventTrigger t)))
--- type ApHostAction t = Ap (HostFrame t) (DList (DSum (EventTrigger t)))
+-- type HostAction t = HostFrame t (DList (DSum (EventTrigger t)))
 
+type HostAction t = HostFrame t ()
 
 
 data HostActions t = HostActions 
@@ -82,12 +78,12 @@ data HostActions t = HostActions
 
 
 instance ReflexHost t => Monoid (HostActions t) where
-  mempty = HostActions mempty (return DL.empty)
-  mappend (HostActions p pb) (HostActions p' pb') = HostActions (p <> p') (liftA2 (<>) pb pb')
+  mempty = HostActions mempty (return ())
+  mappend (HostActions p pb) (HostActions p' pb') = HostActions (p <> p') (pb >> pb')
   
   
 mergeActions :: ReflexHost t => [Event t (HostAction t)] -> Event t (HostAction t)
-mergeActions = mergeWith (liftA2 (<>))
+mergeActions = mergeWith (>>)
 
 switchActions :: (MonadHold t m, ReflexHost t) => HostActions t -> Event t (HostActions t) -> m (HostActions t)
 switchActions (HostActions perform postBuild) updates = do
@@ -96,7 +92,7 @@ switchActions (HostActions perform postBuild) updates = do
     where
       updatedPostBuild = _hostPostBuild <$> updates  
 
-
+ 
       
 
 $(makeLenses ''HostActions)  
@@ -128,7 +124,7 @@ deriving instance ReflexHost t => MonadFix (AppHost t)
 -- application info.
 runAppHostFrame :: ReflexHost t => AppEnv t -> AppHost t a -> HostFrame t (a, HostActions t)
 runAppHostFrame env app = flip runStateT initial . flip runReaderT env .  unAppHost $ app
-  where initial = HostActions [] (pure (DL.empty))
+  where initial = HostActions [] (pure ())
 
   
   
@@ -264,8 +260,8 @@ instance (ReflexHost t, MonadIO (HostFrame t)) => MonadAppHost t (AppHost t) whe
     env <- AppHost ask
     pure $ fmap swap . runAppHostFrame env
     
-  performEvent_ event = AppHost $ hostPerform %= ((voidAction <$> event) :) 
-  schedulePostBuild action = AppHost $ hostPostBuild %= (>> (voidAction $ action)) 
+  performEvent_ event = AppHost $ hostPerform %= (event :) 
+  schedulePostBuild action = AppHost $ hostPostBuild %= (>> action) 
   
   performHost actions = AppHost $ modify (actions <>)
   
@@ -274,3 +270,4 @@ instance (ReflexHost t, MonadIO (HostFrame t)) => MonadAppHost t (AppHost t) whe
   
 holdActions :: (MonadAppHost t m) => HostActions t -> Event t (HostActions t) -> m ()
 holdActions initial updates = performHost =<< switchActions initial updates
+
