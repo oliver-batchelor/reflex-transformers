@@ -42,15 +42,10 @@ import  Data.Traversable
 
 import Prelude -- Silence AMP warnings
 
-
-  
-  
-   
   
 -- | Create a new event from an external event source. The returned function can be used
 -- to fire the event.
-newExternalEvent :: (HasPostAsync t m) 
-                 => m (Event t a, a -> IO ())
+newExternalEvent :: (HasPostAsync t m) => m (Event t a, a -> IO ())
 newExternalEvent = do
   fire <- askPostAsync
   (event, construct) <- newEventWithConstructor
@@ -70,8 +65,7 @@ postQuit = do
 -- | Run some IO asynchronously in another thread starting after the frame in which the
 -- input event fires and fire an event with the result of the IO action after it
 -- completed.
-performEventAsync :: (HasPostAsync t m, HostWriter r m, HasHostActions t r) 
-                   => Event t (IO a) -> m (Event t a)
+performEventAsync :: (MonadIOHost t m r) => Event t (IO a) -> m (Event t a)
 performEventAsync event = do
   (result, fire) <- newExternalEvent
   performEvent_ $ liftIO <$> (void . forkIO . void . fire =<<) <$> event
