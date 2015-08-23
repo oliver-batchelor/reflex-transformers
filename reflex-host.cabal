@@ -32,13 +32,14 @@ benchmark bench-builder-all
   type:             exitcode-stdio-1.0
   hs-source-dirs:   bench
   main-is:          Performance.hs
-  build-depends:    base  >= 4.4 && < 5,
-                    criterion,
-                    reflex-host >= 0.2,
-                    reflex,
-                    containers,
-                    mtl,
-                    lens
+  build-depends:    
+      base  >= 4.4 && < 5
+    , criterion
+    , reflex-host >= 0.2
+    , reflex
+    , containers
+    , mtl
+    , lens
                     
   ghc-options:      -O2  
   
@@ -57,6 +58,7 @@ library
     , transformers
     , lens
     , semigroups
+    , containers
   default-extensions:
     FlexibleInstances
     TupleSections

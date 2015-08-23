@@ -3,11 +3,14 @@
 
 module Reflex.Host.App.Class where
 
+
 import Data.Dependent.Sum
 
 import Reflex.Class hiding (constant)
 import Reflex.Host.Class
+import Reflex.Host.App.Util
 
+import Data.Map (Map)
 
 import Control.Monad
 import Control.Monad.State.Strict
@@ -23,7 +26,7 @@ import Data.DList (DList)
 import Prelude
 
 
-type AppInputs t = HostFrame t [DSum (EventTrigger t)]
+type AppInputs t m = Host t m [DSum (EventTrigger t)]
 
 
 class (Reflex t) => Switching t r | r -> t where
@@ -35,80 +38,104 @@ class (Switching t r, Monoid r) => SwitchMerge t r | r -> t where
 
 
 instance (Switching t a, Switching t b) => Switching t (a, b) where
-  switching (a, b) e = liftM2 (,) (switching a $ fmap fst <$> e) (switching b $ fmap snd <$> e)
+  switching (a, b) e = liftM2 (,) (switching a $ fst <$> e) (switching b $ snd <$> e)
   
   
 instance (SwitchMerge t a, SwitchMerge t b) => SwitchMerge t (a, b) where
-  switchMerge (a, b) e = do
-    liftM2 (,) (switchMerge a $ fst <$> e) (switchMerge b $ snd <$> e)
+  switchMerge initial e = do
+    a <- switchMerge (fst <$> initial) (fmap (fmap fst) <$> e)
+    b <- switchMerge (snd <$> initial) (fmap (fmap snd) <$> e)
+    return (a, b)
 
 
 newtype Behaviors t a = Behaviors { unBehaviors :: [Behavior t a] } deriving Monoid
-newtype Events t a = Events { unEvents :: DList [Event t a] } deriving Monoid
+newtype Events t a = Events { unEvents :: [Event t a] } deriving Monoid
 
 
 events :: Event t a -> Events t a
 events = Events . pure
 
+
+mergeEvents :: (Reflex t, Semigroup a) => Events t a -> Event t a
+mergeEvents = mergeWith (<>) . unEvents
+
 behaviors :: Behavior t a -> Behaviors t a
 behaviors = Behaviors . pure
 
-instance (Monoid a, Reflex t) => SwitchGroup t [Behaviors t a]  where
-  switchGroup bs updated = behaviors <$> switcher (mergeGroup bs) (mergeGroup <$> updated)
-  mergeGroup = events . mconcat . unBehaviors
-
-  
-      
-instance (Semigroup a, Reflex t) => SwitchGroup t (Events t a) where
-  switchGroup es updated = events <$> switchPromptly (mergeGroup es) (mergeGroup <$> updated)
-  mergeGroup = events . mconcat . unEvents
-  
+mergeBehaviors :: (Reflex t, Monoid a) => Behaviors t a -> Behavior t a
+mergeBehaviors = mconcat . unBehaviors
 
 
+
+instance (Monoid a, Reflex t) => Switching t (Behaviors t a)  where
+  switching bs updates = behaviors <$> switcher (mergeBehaviors bs) (mergeBehaviors <$> updates)
+
+instance (Semigroup a, Reflex t) => Switching t (Events t a) where
+  switching es updates = events <$> switchPromptly (mergeEvents es) (mergeEvents <$> updates)
+
   
-class (Monad m, Monoid r) => HostWriter r m | m -> r  where  
+class (Monad m, Monoid r) => MonadAppWriter r m | m -> r  where  
  
   -- | Writes 'r' to the host, analogous to 'tell' from MonadWriter
-  tellHost :: r -> m ()
+  tellApp :: r -> m ()
   
   -- | Collect the result of one writer and return it in another
-  collectHost :: m a -> m (a, r)
+  collectApp :: m a -> m (a, r)
   
 
-class (HostWriter r (m r), HostWriter s (m s)) => HostMap m s r  where  
+class (MonadAppWriter r (m r), MonadAppWriter s (m s)) => MapWriter m s r  where  
   
-  -- | Embed one HostWriter in another, a function is used to split the 
+  -- | Embed one MonadAppWriter in another, a function is used to split the 
   --   result of the inner writer into parts to 'tell' the outer writer
   --   and a part to return.
-  mapHost :: (s -> (r, b)) -> m s a -> m r (a, b) 
+  mapWriter :: (s -> (r, b)) -> m s a -> m r (a, b) 
   
   
-appendHost :: HostMap m (r, s) r => m (r, s) a -> m r (a, s)
-appendHost = mapHost id
+appendApp :: MapWriter m (r, s) r => m (r, s) a -> m r (a, s)
+appendApp = mapWriter id
 
-holdHost :: (MonadHold t m, HostWriter r m, Switchable t r) => r -> Event t r -> m ()
-holdHost initial updated = tellHost =<< switchGroup initial updated
+holdApp :: (MonadHold t m, MonadAppWriter r m, Switching t r) => r -> Event t r -> m ()
+holdApp initial updated = tellApp =<< switching initial updated
 
-holdHostF :: (MonadHold t m,  HostWriter r m, Switchable t r, Foldable f) => f r -> Event t (f r) -> m ()
-holdHostF initial updated = tellHost =<< switchGroup (fold initial) (fold <$> updated)
+holdAppF :: (MonadHold t m,  MonadAppWriter r m, Switching t r, Foldable f) => f r -> Event t (f r) -> m ()
+holdAppF initial updated = tellApp =<< switching (fold initial) (fold <$> updated)
 
   
-class (Reflex t, MonadFix m, MonadHold t m, MonadHold t (Host t m), MonadFix (Host t m),  
-       HostWriter r m, Switchable t r) => MonadAppHost t r m | m -> t r where
+class (ReflexHost t, MonadFix m, MonadHold t m, MonadHold t (Host t m), MonadFix (Host t m),  
+       MonadAppWriter r m, Switching t r) => MonadAppHost t r m | m -> t r where
   type Host t m :: * -> *
     
-  -- | Run a monadic action after each frame in which the event fires, and return the result
-  -- in a new event which is fired immediately following the frame in which the original
-  -- event fired.
+  -- | Run a monadic host action during or immediately each frame in which the event fires, 
+  -- and return the result in an event fired before other events. 
+  -- (Either in the same frame, or in the next immediate frame.
+  performEvent :: Event t (Host t m a) -> m (Event t a)
   
-  performHost :: Event t (Host t m a) -> m (Event t a)
+  -- | Return a funtion to run a MonadApp action in it's Host 
+  -- return it's MonadAppWriter contents.
   
-  askRunAppHost :: m (m a -> Host t m (a, r)) 
+  askRunApp :: m (m a -> Host t m (a, r)) 
   
-  liftAppHost :: Host t m a -> m a
-  
+  -- | Lift a Host action to a MonadApp action
+  liftHost :: Host t m a -> m a
   
 
+class (MonadAppHost t r m, MonadIO m, MonadIO (Host t m), 
+      MonadReflexCreateTrigger t m) => MonadIOHost t r m | m -> t r  where
+        
+  -- | Return a function to post events via IO to a fifo Event queue.
+  askPostAsync :: m (AppInputs t m -> IO ())      
+
+  -- | Run a monadic Host action for the purposes of it's IO effects. 
+  -- e.g. for setting properties of an underlying UI or executing an XHR request.
+  performEvent_ :: Event t (Host t m a) -> m ()
+
+  -- | Run host action for it's effects after construction.
+  schedulePostBuild :: Host t m () -> m ()  
+  
+  -- | Run host action for it's effects after construction, 
+  -- return the result in an Event.
+  generatePostBuild :: Host t m a -> m (Event t a)
+  
   
 -- deriving creates an error requiring ImpredicativeTypes
 instance (Reflex t, MonadReflexCreateTrigger t m) => MonadReflexCreateTrigger t (StateT s m) where

@@ -82,10 +82,7 @@ instance (ReflexHost t, HostHasIO t (IOHost t r), Monoid s, Monoid r) => HostMap
     
 
     
-instance HostHasIO t (IOHost t r) => HasPostAsync t (IOHost t r) where
-  askPostAsync = IOHost $ do
-    chan <- ask
-    return $ liftIO . writeChan chan    
+
   
 instance (MonadIO (HostFrame t), Switchable t r, Monoid r, ReflexHost t, HasHostActions t r) 
         => MonadAppHost t r (IOHost t r) where
@@ -105,9 +102,11 @@ instance (MonadIO (HostFrame t), Switchable t r, Monoid r, ReflexHost t, HasHost
   
     
 
-instance (MonadIO (HostFrame t), ReflexHost t) => HostHasIO t (IOHost t r) 
-instance (HasHostActions t r, HostHasIO t (IOHost t r), MonadAppHost t r (IOHost t r)) => MonadIOHost t r (IOHost t r)
-  
+instance (HasHostActions t r, MonadAppHost t r (IOHost t r)) => MonadIOHost t r (IOHost t r) where
+    askPostAsync = IOHost $ do
+      chan <- ask
+      return $ liftIO . writeChan chan    
+    
   
   
 -- | Run an application. The argument is an action in the application host monad,
