@@ -103,29 +103,20 @@ dummyView d = do
   performEvent_ $ ffor (updated d) $ \a -> return ()
   
 
-{-  
-main :: IO ()
-main = runTest $ testAdd n
-  
-  where
-    n = 50
-    b = 10  
-  -}
-  
 main :: IO ()
 main = defaultMain 
-  [ bench ("add 1 x " ++ show n) $ nfIO (runTest $ testAdd 1 n)
-  ,  bench ("add 1 x " ++ show n) $ nfIO (runTest $ testAdd 4 n)
---   , bench ("modify 1 x " ++ show n) $ nfIO (runTest $ testModify n)
---   , bench ("add/remove " ++ show n ++ " x " ++ show b) $ nfIO (runTest $ testBulk n b)
---   , bench ("remove 1 x " ++ show n) $ nfIO (runTest $ testRemove n)
+  [ benchN 4 50
+  , benchN 4 100
   ]
   
   where
-    n = 100
-    b = 20
-  
-   
+    
+    benchN v n = bgroup (show [v, n])
+      [ bench "add incremental" $ nfIO (runTest $ testAdd v n)
+      , bench ("modify incremental") $ nfIO (runTest $ testModify v n)
+      , bench ("remove incremental ") $ nfIO (runTest $ testRemove v n)
+      , bench ("bulk add/remove x 20") $ nfIO (runTest $ testBulk v n 20) 
+      ]
   
 runTest :: AppHost Spider () -> IO ()
 runTest test = runSpiderHost . hostApp $ do
