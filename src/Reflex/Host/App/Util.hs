@@ -11,7 +11,7 @@ import Control.Monad.IO.Class
 import Data.IORef
 
 import Prelude
-
+ 
 
   
 -- | Create a new event and return a function that can be used to construct an event

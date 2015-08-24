@@ -2,23 +2,20 @@
 -- | Module supporting the implementation of frameworks. You should import this if you
 -- want to build your own framework.
 module Reflex.Host.App 
-  ( newExternalEvent, performEvent_, performEvent, performEventAsync
---   , getPostBuild, generateEvent
-  
-  , schedulePostBuild
+  ( newExternalEvent, performEventAsync
 
-  
-  , AppInputs, Switching (..)
+  , Switching (..), SwitchMerge (..)
   , MonadAppWriter (..), MapWriter (..)
   , MonadAppHost(..)
   , MonadIOHost (..)
+
+  , performAppHost, holdAppHost 
   
---   , HasPostBuild (..)
   
   , HostActions
   , Events, Behaviors
   
-  , holdApp, holdAppF
+  , holdApp, holdSwitchMerge
   , postQuit
   
   ) where
@@ -26,10 +23,9 @@ module Reflex.Host.App
 import Control.Applicative
 import Control.Concurrent
 import Control.Monad
+import Control.Monad.Fix
 import Control.Monad.Trans
-import Data.Dependent.Sum
-import Data.IORef
-import Data.Maybe
+
 import Data.Monoid
 import Reflex.Class
 import Reflex.Dynamic
@@ -37,11 +33,11 @@ import Reflex.Host.App.Class
 import Reflex.Host.App.Util
 
 import Reflex.Host.App.HostActions
+import Reflex.Host.App.Switching
 
-import Reflex.Host.Class
+import Data.Map (Map)
 
-import  Data.Foldable
-import  Data.Traversable
+
 
 import Prelude -- Silence AMP warnings
 
@@ -92,6 +88,13 @@ performEventAsync event = do
 -- -- application is completed.
 -- getPostBuild ::  (HasPostBuild t m) => m (Event t ())
 -- getPostBuild = generateEvent (return ())
+
+
+holdApp :: (MonadHold t m, MonadAppWriter r m, Switching t r) => r -> Event t r -> m ()
+holdApp initial updates = tellApp =<< switching initial updates
+
+holdSwitchMerge :: (MonadHold t m, MonadFix m, MonadAppWriter r m, Ord k, SwitchMerge t r) => Map k r -> Event t (Map k (Maybe r)) -> m ()
+holdSwitchMerge initial updates = tellApp =<< switchMerge initial updates
 
  
 

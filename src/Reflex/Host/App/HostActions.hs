@@ -1,26 +1,29 @@
+{-# LANGUAGE ConstraintKinds #-}
+
 module Reflex.Host.App.HostActions where
 
 import Data.Dependent.Sum
 
 import Reflex.Class hiding (constant)
 import Reflex.Host.Class
-
-import Reflex.Host.App.Class 
 import Reflex.Host.App.Util
+import Reflex.Host.App.Switching
+import Reflex.Host.App.Class
 
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Semigroup.Applicative
 import Data.Semigroup
 
+import Data.Foldable
+import qualified Data.Map as Map
 
-import qualified  Data.DList  as DL
+-- import qualified  Data.DList  as DL
 import Data.DList (DList)
 
 import Prelude
 
 
-import Reflex.Host.App.Util
 
 type HostAction t = HostFrame t (DList (DSum (EventTrigger t)))
 type ApHostAction t = Ap (HostFrame t) (DList (DSum (EventTrigger t)))
@@ -36,16 +39,37 @@ instance ReflexHost t => Monoid (HostActions t) where
   mempty = HostActions mempty mempty
   mappend (HostActions p t) (HostActions p' t') = HostActions (mappend p p') (mappend t t')
 
+instance ReflexHost t => Semigroup (HostActions t)
 
 instance ReflexHost t => Switching t (HostActions t) where
     switching (HostActions perform postBuild) updated = do
       updatedPerform <- switching perform (hostPerform <$> updated)
-      return (HostActions (updatedPostBuild `mappend` updatedPerform) postBuild)
+      return (HostActions (updatedPostBuild <> updatedPerform) postBuild)
       
       where
         updatedPostBuild = events (hostPostBuild <$> updated)
       
 
+  
+instance (ReflexHost t) => SwitchMerge t (HostActions t) where
+  switchMerge initial updates = do 
+
+    updatedPerform <- switchMerge perform updates'
+    return (HostActions (updatedPostBuild <> updatedPerform) postBuild)
+  
+    where
+      perform = hostPerform <$> initial
+      updates' = fmap (fmap hostPerform) <$> updates
+    
+      postBuild = fold $ hostPostBuild <$> initial
+      updatedPostBuild = events (fold . Map.mapMaybe (fmap hostPostBuild) <$> updates)
+    
+--     updatedPostBuild = events (hostPostBuild <$> updated)
+
+      
+      
+      
+      
 {-# INLINEABLE makePerform_ #-}
 makePerform_ :: ReflexHost t => Event t (HostFrame t ()) -> HostActions t
 makePerform_ e = mempty { hostPerform = events $ Ap . fmap (const mempty) <$> e }
@@ -80,17 +104,20 @@ tellActions = tellApp . fromActions
 performActions_ :: (ReflexHost t, MonadAppWriter r m, HasHostActions t r) =>  Event t (HostFrame t ()) -> m ()
 performActions_  = tellActions . makePerform_
 
-scheduleActions :: (ReflexHost t, MonadAppWriter r m, HasHostActions t r) => HostFrame t (DList (DSum (EventTrigger t))) -> m ()  
-scheduleActions = tellActions . makePostBuild
+scheduleActions :: (IOHost t m, MonadAppWriter r m, HasHostActions t r) => HostFrame t a -> m (Event t a)
+scheduleActions actions = do 
+  (event, construct) <- newEventWithConstructor
+  tellActions . makePostBuild $ liftIO . construct =<< actions
+  return event
 
 scheduleActions_ :: (ReflexHost t, MonadAppWriter r m, HasHostActions t r) => HostFrame t () -> m ()
-scheduleActions_ action = scheduleActions (action >> pure mempty)
+scheduleActions_ action = tellActions . makePostBuild $ action >> pure mempty
   
-performActions :: (ReflexHost t, MonadReflexCreateTrigger t m, MonadIO m, MonadIO (HostFrame t), 
-                  MonadAppWriter r m, HasHostActions t r) =>  Event t (HostFrame t a) -> m (Event t a)
+  
+performActions :: (IOHost t m,  MonadAppWriter r m, HasHostActions t r) =>  Event t (HostFrame t a) -> m (Event t a)
 performActions e = do 
   (event, construct) <- newEventWithConstructor
-  tellActions . makePerform $ (\h -> h >>= liftIO . construct) <$> e
+  tellActions . makePerform $ (liftIO . construct =<<) <$> e
   return event
   
 

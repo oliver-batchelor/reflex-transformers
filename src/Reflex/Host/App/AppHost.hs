@@ -9,27 +9,24 @@ import Control.Applicative
 import Control.Concurrent
 import Control.Monad.Reader
 import Control.Monad.State.Strict
-import Control.Lens hiding (Traversal)
 import Data.Dependent.Sum
-import Data.IORef
 import Data.Bifunctor
 
+import qualified  Data.DList  as DL
+import Data.Semigroup.Applicative
 
 import Reflex.Class hiding (constant)
 import Reflex.Host.Class
-
-import Data.Semigroup.Applicative
-
 import Reflex.Host.App.Class
 import Reflex.Host.App.HostActions
+import Reflex.Host.App.Switching
 
 
-import Reflex.Host.App
-import qualified  Data.DList  as DL
-import Data.DList (DList)
 
 import Prelude
 
+
+type AppInputs t = HostFrame t [DSum (EventTrigger t)]
 
 newtype AppHost t r a = AppHost
   { unAppHost :: ReaderT (Chan (AppInputs t)) (StateT r (HostFrame t))  a
@@ -83,10 +80,10 @@ instance (ReflexHost t, Monoid s, Monoid r) => MapWriter (AppHost t) s r  where
     return (a, b)    
     
 
-    
+     
 
   
-instance (MonadIO (HostFrame t), Switching t r, Monoid r, ReflexHost t, HasHostActions t r) 
+instance (SwitchMerge t r, MonadIO (HostFrame t), Monoid r, ReflexHost t, HasHostActions t r) 
         => MonadAppHost t r (AppHost t r) where
           
   type Host t (AppHost t r) = HostFrame t
@@ -101,11 +98,16 @@ instance (MonadIO (HostFrame t), Switching t r, Monoid r, ReflexHost t, HasHostA
   
     
 
-instance (HasHostActions t r, MonadAppHost t r (AppHost t r)) => MonadIOHost t r (AppHost t r) where
+instance (HasHostActions t r, MonadIO (HostFrame t), MonadAppHost t r (AppHost t r)) => MonadIOHost t r (AppHost t r) where
     askPostAsync = AppHost $ do
       chan <- ask
       return $ liftIO . writeChan chan    
+      
+    performEvent_ = performActions_
     
+    schedulePostBuild_ = scheduleActions_
+    
+    schedulePostBuild = scheduleActions
   
   
 -- | Run an application. The argument is an action in the application host monad,

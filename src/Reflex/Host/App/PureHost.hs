@@ -9,7 +9,10 @@ import Data.Bifunctor
 import Data.Maybe
 import Reflex.Class hiding (constant)
 import Reflex.Host.Class
+
+
 import Reflex.Host.App.Class
+import Reflex.Host.App.Switching
 
 import Prelude
 
@@ -67,7 +70,7 @@ runPureHost app = do
   return (a, mconcat r)
 
   
-instance (ReflexHost t, Switching t r, Monoid r) => MonadAppHost t r (PureHost t r) where
+instance (ReflexHost t, SwitchMerge t r, Monoid r) => MonadAppHost t r (PureHost t r) where
   
   type Host t (PureHost t r) = M t
   

@@ -20,47 +20,30 @@ import Reflex
 import Reflex.Host.Class
 
 import Reflex.Host.App
-import Reflex.Host.App.IO
+import Reflex.Host.App.AppHost
 import Criterion.Main
 
 
 import System.Exit
 
-
-data Diff a = Added a | Removed deriving (Show, Functor)
-
-$(makePrisms ''Diff)
-  
-
-  
--- schedulePostBuild ::  (MonadAppHost t m) => HostFrame t () -> m ()
--- schedulePostBuild action = performPostBuild_ $ action >> pure mempty
--- 
--- 
--- switchActions :: (MonadAppHost t m, Functor f, Foldable f) => Event t (f (HostFrame t (AppInfo t))) -> m ()
--- switchActions info = do    
---   event <- performEvent $ getApp . foldMap id . fmap Ap <$> info
---   performPostBuild_ $ switchAppInfo mempty event
-
   
    
-   
-holdMap :: (MonadAppHost t r m, Ord k) => Map k a -> Event t (Map k (Diff a)) -> m (Dynamic t (Map k a))
-holdMap initial changes = foldDyn (flip (ifoldr modify)) initial changes
+patchMap :: (MonadAppHost t r m, Ord k) => Map k a -> Event t (Map k (Maybe a)) -> m (Dynamic t (Map k a))
+patchMap initial changes = foldDyn (flip (ifoldr modify)) initial changes
   
   where 
-    modify k Removed items = Map.delete k items
-    modify k (Added item) items = Map.insert k item items
+    modify k Nothing items = Map.delete k items
+    modify k (Just item) items = Map.insert k item items
 
 
 
         
-diffKeys :: (Ord k) => Map k a -> Map k b -> Map k (Diff b)
-diffKeys m m' = (Added <$> m' Map.\\ m)  <> (const Removed <$>  m Map.\\ m')  
+diffKeys :: (Ord k) => Map k a -> Map k b -> Map k (Maybe b)
+diffKeys m m' = (Just <$> m' Map.\\ m)  <> (const Nothing <$>  m Map.\\ m')  
      
      
      
-diffInput :: (Reflex t, Ord k) => Behavior t (Map k a) -> Event t (Map k b) -> Event t (Map k (Diff b))
+diffInput :: (Reflex t, Ord k) => Behavior t (Map k a) -> Event t (Map k b) -> Event t (Map k (Maybe b))
 diffInput currentItems updatedItems = ffilter (not . Map.null) $ 
   attachWith diffKeys currentItems updatedItems
         
@@ -68,16 +51,16 @@ diffInput currentItems updatedItems = ffilter (not . Map.null) $
       
 domList :: (MonadAppHost t r m, Ord k, Show k) => Dynamic t (Map k (m a)) ->  m (Dynamic t (Map k a))
 domList input  = do
-  runAppHost <- askRunAppHost
-  initial <- mapM collectHost =<< sample (current input)
+  runApp <- askRunApp
+  initial <- mapM collectApp =<< sample (current input)
   
   let changes = diffInput (current input) (updated input)
 
-  viewChanges <- performHost $ mapMOf (traverse . _Added) runAppHost <$> changes
-  views <- holdMap initial viewChanges
+  viewChanges <- performEvent $ mapMOf (traverse . _Just) runApp <$> changes
+
+  holdSwitchMerge (snd <$> initial) (fmap (fmap snd) <$> viewChanges)
+  patchMap (fst <$> initial) (fmap (fmap fst) <$> viewChanges)
   
-  holdHostF (snd <$> initial) (fmap snd <$> updated views)
-  mapDyn (fmap fst) views
   
   
   
@@ -121,12 +104,10 @@ main = defaultMain
     b = 20
   
   
-runTest :: IOHost Spider (HostActions Spider) () -> IO ()
+runTest :: AppHost Spider (HostActions Spider) () -> IO ()
 runTest test = runSpiderHost . hostApp $ do
   test >> postQuit
   
-
-
   
 type Item = (Bool, String)
 

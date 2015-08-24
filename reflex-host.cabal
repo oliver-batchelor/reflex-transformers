@@ -1,5 +1,5 @@
 name:          reflex-host
-version:       0.2
+version:       0.3
 license:       BSD3
 license-file:  LICENSE
 cabal-version: >= 1.10
@@ -55,7 +55,7 @@ library
     , reflex >= 0.3
     , dlist
     , dependent-sum
-    , transformers
+    , transformers 
     , lens
     , semigroups
     , containers
@@ -79,6 +79,11 @@ library
     Reflex.Host.App.Class
     Reflex.Host.App.AppHost
     Reflex.Host.App.PureHost
+    Reflex.Host.App.HostActions
+    Reflex.Host.App.Switching
+    Reflex.Host.App.Util
+
+  ghc-options: -Wall -O2 -threaded
 
 
 test-suite doctests
