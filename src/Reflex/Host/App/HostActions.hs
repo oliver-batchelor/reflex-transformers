@@ -16,7 +16,7 @@ import Data.Semigroup.Applicative
 import Data.Semigroup
 
 import Data.Foldable
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 
 -- import qualified  Data.DList  as DL
 import Data.DList (DList)
@@ -64,9 +64,6 @@ instance (ReflexHost t) => SwitchMerge t (HostActions t) where
       postBuild = fold $ hostPostBuild <$> initial
       updatedPostBuild = events (fold . Map.mapMaybe (fmap hostPostBuild) <$> updates)
     
---     updatedPostBuild = events (hostPostBuild <$> updated)
-
-      
       
       
       
@@ -97,7 +94,7 @@ instance HasHostActions t (HostActions t) where
   {-# INLINE fromActions #-}
   fromActions = id
   
-  
+{-# INLINEABLE tellActions #-}
 tellActions :: (ReflexHost t, MonadAppWriter r m, HasHostActions t r) => HostActions t -> m ()
 tellActions = tellApp . fromActions
 

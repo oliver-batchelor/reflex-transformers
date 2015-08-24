@@ -18,6 +18,9 @@ module Reflex.Host.App
   , holdApp, holdSwitchMerge
   , postQuit
   
+  , events, mergeEvents
+  , behaviors, mergeBehaviors 
+  
   ) where
 
 import Control.Applicative

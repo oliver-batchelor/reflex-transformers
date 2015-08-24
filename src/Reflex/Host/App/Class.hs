@@ -12,7 +12,7 @@ import Reflex.Host.Class
 
 import Reflex.Host.App.Switching
 
-import Data.Map (Map)
+import Data.Map.Strict (Map)
 
 import Control.Monad
 import Control.Monad.State.Strict

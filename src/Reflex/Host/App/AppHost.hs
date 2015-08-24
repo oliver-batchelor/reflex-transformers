@@ -66,7 +66,7 @@ liftHostFrame = AppHost . lift . lift
  
 instance (Monoid r, ReflexHost t) => MonadAppWriter r (AppHost t r) where
   
-  tellApp r = AppHost $ modify (r `mappend`) 
+  tellApp r = AppHost $ modify' (r `mappend`) 
   
   collectApp ma  = do
     env <- AppHost ask
@@ -135,8 +135,8 @@ initHostApp :: (ReflexHost t, MonadIO m, MonadReflexHost t m)
 initHostApp app = do
   env <- liftIO newChan 
   
-  (HostActions performUpdated performInit) <- runHostFrame $ execAppHostFrame env app
-  nextActionEvent <- subscribeEvent (mergeHostActions performUpdated)
+  (HostActions perform postBuild) <- runHostFrame $ execAppHostFrame env app
+  nextActionEvent <- subscribeEvent (mergeHostActions perform)
 
   let
     go [] = return ()
@@ -148,7 +148,7 @@ initHostApp app = do
     eventValue :: MonadReadEvent t m => EventHandle t a -> m (Maybe a)
     eventValue = readEvent >=> sequenceA
 
-  go =<< DL.toList <$> runHostFrame (getApp performInit)
+  go =<< DL.toList <$> runHostFrame (getApp postBuild)
   return (env, go)
 
    

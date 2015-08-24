@@ -69,6 +69,9 @@ runPureHost app = do
   (a, r) <- unM . flip runStateT [] . unPureHost $ app
   return (a, mconcat r)
 
+execPureHost :: (MonadHold t m, MonadFix m, Monoid r) => PureHost t r a -> m r
+execPureHost app = snd <$> runPureHost app
+  
   
 instance (ReflexHost t, SwitchMerge t r, Monoid r) => MonadAppHost t r (PureHost t r) where
   
