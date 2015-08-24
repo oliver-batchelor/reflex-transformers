@@ -130,11 +130,11 @@ class (MonadAppHost t r m, MonadIO m, MonadIO (Host t m),
   performEvent_ :: Event t (Host t m a) -> m ()
 
   -- | Run host action for it's effects after construction.
-  schedulePostBuild :: Host t m () -> m ()  
+  schedulePostBuild_ :: Host t m () -> m ()  
   
   -- | Run host action for it's effects after construction, 
   -- return the result in an Event.
-  generatePostBuild :: Host t m a -> m (Event t a)
+  schedulePostBuild :: Host t m a -> m (Event t a)
   
   
 -- deriving creates an error requiring ImpredicativeTypes

@@ -1,5 +1,5 @@
 
-module Reflex.Host.App.Pure where
+module Reflex.Host.App.PureHost where
 
 import Control.Applicative
 import Control.Monad.Reader
