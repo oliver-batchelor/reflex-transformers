@@ -12,9 +12,10 @@ import Data.Functor
 import Data.Monoid ((<>))
 import Data.Maybe (catMaybes)
 import Control.Concurrent
-import Control.Lens
+import Control.Lens hiding (Traversal)
 
 import Data.Tuple
+import Control.Applicative
 
 import Reflex
 import Reflex.Host.Class
@@ -26,8 +27,7 @@ import Criterion.Main
 
 import System.Exit
 
-  
-   
+
 patchMap :: (MonadAppHost t r m, Ord k) => Map k a -> Event t (Map k (Maybe a)) -> m (Dynamic t (Map k a))
 patchMap initial changes = foldDyn (flip (ifoldr modify)) initial changes
   
@@ -62,8 +62,6 @@ domList input  = do
   patchMap (fst <$> initial) (fmap (fmap fst) <$> viewChanges)
   
   
-  
-  
 
   
 listWithKey :: (MonadAppHost t r m, Ord k, Show k) => Dynamic t (Map k v) -> (k -> Dynamic t v ->  m a) ->  m (Dynamic t (Map k a))
@@ -75,45 +73,49 @@ listWithKey d view =  do
     itemView k v = holdDyn v (fmapMaybe (Map.lookup k) (updated d)) >>= view k
   
 
-dummyView :: MonadIOHost t r m => Dynamic t a -> m ()  
+dummyView :: (MonadIOHost t r m, Show a) => Dynamic t a -> m ()  
 dummyView d = do
   
   schedulePostBuild $ sample (current d) >> return ()
-  schedulePostBuild $ sample (current d) >> return ()
-  schedulePostBuild $ sample (current d) >> return ()
-  schedulePostBuild $ sample (current d) >> return ()
-  
-  
-  performEvent_ $ ffor (updated d) $ \a -> return ()
-  performEvent_ $ ffor (updated d) $ \a -> return ()
-  performEvent_ $ ffor (updated d) $ \a -> return ()
   performEvent_ $ ffor (updated d) $ \a -> return ()
   
 
+{-  
+main :: IO ()
+main = runTest $ testAdd n
+  
+  where
+    n = 50
+    b = 10  
+  -}
   
 main :: IO ()
 main = defaultMain 
-  [ bench ("add 1 x " ++ show n) $ nfIO (runTest $ testAdd n)
-  , bench ("modify 1 x " ++ show n) $ nfIO (runTest $ testModify n)
-  , bench ("add/remove " ++ show n ++ " x " ++ show b) $ nfIO (runTest $ testBulk n b)
-  , bench ("remove 1 x " ++ show n) $ nfIO (runTest $ testRemove n)
+  [ bench ("add 1 x " ++ show n) $ nfIO (runTest $ testAdd 1 n)
+  ,  bench ("add 1 x " ++ show n) $ nfIO (runTest $ testAdd 4 n)
+--   , bench ("modify 1 x " ++ show n) $ nfIO (runTest $ testModify n)
+--   , bench ("add/remove " ++ show n ++ " x " ++ show b) $ nfIO (runTest $ testBulk n b)
+--   , bench ("remove 1 x " ++ show n) $ nfIO (runTest $ testRemove n)
   ]
   
   where
     n = 100
     b = 20
   
+   
   
 runTest :: AppHost Spider (HostActions Spider) () -> IO ()
 runTest test = runSpiderHost . hostApp $ do
   test >> postQuit
   
+
+
   
 type Item = (Bool, String)
 
 
-setup :: (MonadIOHost t r m) => Map Int Item -> m (Map Int Item -> IO (), Map Int () -> IO ())
-setup initial =  do
+setup :: (MonadIOHost t r m) => Int -> Map Int Item -> m (Map Int Item -> IO (), Map Int () -> IO ())
+setup views initial =  do
     
   (addItem, fireAdd) <-  newExternalEvent
   (removeItem, fireRemove) <-  newExternalEvent
@@ -123,32 +125,37 @@ setup initial =  do
     <- foldDyn ($) initial $ mergeWith (.) 
     [ mappend <$> addItem 
     , flip Map.difference <$> removeItem
-    ]
+    ] 
+    
+--   performEvent_ $ liftIO . print <$> addItem
     
   listWithKey items $ \k v -> do
     (enabled, str) <- splitDyn v
-    dummyView enabled
-    dummyView str
     
-  return (fireAdd, fireRemove)
+    replicateM views $ do
+      dummyView enabled
+      dummyView str
+    
+  return (void . fireAdd, void . fireRemove)
   
   
-testAdd :: (MonadIOHost t r m) => Int -> m ()
-testAdd n = do
-  (add, remove) <- setup mempty
-  liftIO $ forM_ [1..n] $ \i ->  add $ item i
+ 
+testAdd :: (MonadIOHost t r m) => Int -> Int -> m ()
+testAdd v n = do
+  (add, remove) <- setup v mempty
+  liftIO $ forM_ [1..n] $ \i -> add (item i)
   
   
-testModify :: (MonadIOHost t r m) => Int -> m ()
-testModify n = do
-  (add, remove) <- setup (makeItems n)
-  liftIO $ forM_ [1..n] $ \i ->  add $ item i  
+testModify :: (MonadIOHost t r m) => Int ->  Int -> m ()
+testModify v n = do
+  (add, remove) <- setup v (makeItems n)
+  liftIO $ forM_ [1..n] $ \i ->  add (item i)  
   
 
-testBulk :: (MonadIOHost t r m) => Int -> Int -> m ()
-testBulk n b = do
-  (add, remove) <- setup mempty
-  liftIO $ forM_ [1..n] $ const $ do
+testBulk :: (MonadIOHost t r m) => Int -> Int -> Int -> m ()
+testBulk v n b = do
+  (add, remove) <- setup v mempty
+  liftIO $ forM_ [1..n] $ const $ do 
     add $ makeItems b
     remove $ (const () <$> makeItems b)
   
@@ -161,10 +168,9 @@ item i = Map.singleton i (True, "item " ++ show i)
   
   
   
-testRemove :: (MonadIOHost t r m) => Int -> m ()
-testRemove n = do
-  (add, remove) <- setup (makeItems n)
-  forM_ [1..n] $ \i -> liftIO $ remove $ Map.singleton i ()
-  postQuit
+testRemove :: (MonadIOHost t r m) => Int ->  Int -> m ()
+testRemove v n = do
+  (add, remove) <- setup v (makeItems n)
+  liftIO $ forM_ [1..n] $ \i ->  remove $ Map.singleton i ()
   
     
