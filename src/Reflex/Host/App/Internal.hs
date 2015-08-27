@@ -75,10 +75,6 @@ newtype AppHost t a = AppHost
   { unAppHost :: ReaderT (AppEnv t) (StateT (AppState t) (HostFrame t))  a
   }
 
-instance (Reflex t, MonadReflexCreateTrigger t m) => MonadReflexCreateTrigger t (StateT s m) where
-  newEventWithTrigger initializer = lift $ newEventWithTrigger initializer
-  newFanEventWithTrigger initializer = lift $ newFanEventWithTrigger initializer
-
 
   
 deriving instance ReflexHost t => Functor (AppHost t)
