@@ -2,7 +2,17 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ConstraintKinds #-}
 
-module Reflex.Host.App.Class where
+module Reflex.Host.App.Class 
+  ( IOHost
+  , MonadAppHost(..)
+  , MonadIOHost(..)
+  
+  , module Reflex.Host.App.Switching
+  
+  , MapWriter(..)
+  , MonadWriter (..)
+  
+  ) where
 
 
 import Data.Dependent.Sum
@@ -12,31 +22,18 @@ import Reflex.Host.Class
 
 import Reflex.Host.App.Switching
 
-import Data.Map (Map)
-
 import Control.Monad
-import Control.Monad.State.Strict
-import Data.Semigroup
-import Data.Maybe
-import Data.Foldable
+import Control.Monad.Writer.Class
+import Control.Monad.Reader
 
 import Prelude
 
 type IOHost t m = (ReflexHost t, MonadReflexCreateTrigger t m, MonadIO m, MonadIO (HostFrame t))
 
   
-class (Monad m, Monoid r) => MonadAppWriter r m | m -> r  where  
- 
-  -- | Writes 'r' to the host, analogous to 'tell' from MonadWriter
-  tellApp :: r -> m ()
+class (MonadWriter r (m r), MonadWriter s (m s)) => MapWriter m s r  where  
   
-  -- | Collect the result of one writer and return it in another
-  collectApp :: m a -> m (a, r)
-  
-
-class (MonadAppWriter r (m r), MonadAppWriter s (m s)) => MapWriter m s r  where  
-  
-  -- | Embed one MonadAppWriter in another, a function is used to split the 
+  -- | Embed one MonadWriter in another, a function is used to split the 
   --   result of the inner writer into parts to 'tell' the outer writer
   --   and a part to return.
   mapWriter :: (s -> (r, b)) -> m s a -> m r (a, b) 
@@ -46,9 +43,10 @@ appendApp :: MapWriter m (r, s) r => m (r, s) a -> m r (a, s)
 appendApp = mapWriter id
 
 
+
   
 class (ReflexHost t, MonadFix m, MonadHold t m, MonadHold t (Host t m), MonadFix (Host t m),  
-       MonadAppWriter r m, SwitchMerge t r) => MonadAppHost t r m | m -> t r where
+       MonadWriter r m, SwitchMerge t r) => MonadAppHost t r m | m -> t r where
   type Host t m :: * -> *
     
   -- | Run a monadic host action during or immediately each frame in which the event fires, 
@@ -62,6 +60,20 @@ class (ReflexHost t, MonadFix m, MonadHold t m, MonadHold t (Host t m), MonadFix
   
   -- | Lift a Host action to a MonadApp action
   liftHost :: Host t m a -> m a
+  
+  
+instance MonadAppHost t r m => MonadAppHost t r (ReaderT e m) where
+  
+  type Host t (ReaderT e m) = Host t m
+  
+  performEvent = lift . performEvent
+  
+  askRunApp = do
+    run <- lift askRunApp
+    e   <- ask
+    return $ run . flip runReaderT e
+    
+  liftHost = lift . liftHost
   
 
 class (MonadAppHost t r m, MonadIO m, MonadIO (Host t m), 
@@ -82,8 +94,5 @@ class (MonadAppHost t r m, MonadIO m, MonadIO (Host t m),
   schedulePostBuild :: Host t m a -> m (Event t a)
   
   
--- deriving creates an error requiring ImpredicativeTypes
-instance (Reflex t, MonadReflexCreateTrigger t m) => MonadReflexCreateTrigger t (StateT s m) where
-  newEventWithTrigger initializer = lift $ newEventWithTrigger initializer
-  newFanEventWithTrigger initializer = lift $ newFanEventWithTrigger initializer
+
   

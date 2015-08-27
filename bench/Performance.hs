@@ -52,7 +52,7 @@ diffInput currentItems updatedItems = ffilter (not . Map.null) $
 domList :: (MonadAppHost t r m, Ord k, Show k) => Dynamic t (Map k (m a)) ->  m (Dynamic t (Map k a))
 domList input  = do
   runApp <- askRunApp
-  initial <- mapM collectApp =<< sample (current input)
+  initial <- mapM collect =<< sample (current input)
   
   let changes = diffInput (current input) (updated input)
 

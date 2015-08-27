@@ -19,9 +19,6 @@ import Reflex.Class hiding (constant)
 import Reflex.Host.Class
 import Reflex.Host.App.Class
 import Reflex.Host.App.HostActions
-import Reflex.Host.App.Switching
-
-
 
 import Prelude
 
@@ -31,7 +28,7 @@ type AppInputs t = HostFrame t [DSum (EventTrigger t)]
 newtype AppHost t r a = AppHost
   { unAppHost :: ReaderT (Chan (AppInputs t)) (StateT r (HostFrame t))  a
   }
-
+  
   
 deriving instance ReflexHost t => Functor (AppHost t r)
 deriving instance ReflexHost t => Applicative (AppHost t r)
@@ -64,19 +61,29 @@ liftHostFrame :: ReflexHost t => HostFrame t a -> AppHost t r a
 liftHostFrame = AppHost . lift . lift
   
  
-instance (Monoid r, ReflexHost t) => MonadAppWriter r (AppHost t r) where
-  
-  tellApp r = AppHost $ modify (r `mappend`) 
-  
-  collectApp ma  = do
+instance (Monoid r, ReflexHost t) => MonadWriter r (AppHost t r) where  
+  tell r = AppHost $ modify (mappend r) 
+  listen m = do
     env <- AppHost ask
-    liftHostFrame $ runAppHostFrame env ma
+    (a, r) <- liftHostFrame $ runAppHostFrame env m
+    tell r
+    return (a, r)
+  
+  pass m = do
+    env <- AppHost ask
+    ((a, f), r) <- liftHostFrame $ runAppHostFrame env m
+    tell (f r)
+    return a
+    
+
+
+  
 
 instance (ReflexHost t, Monoid s, Monoid r) => MapWriter (AppHost t) s r  where  
   mapWriter f ms = do
     env <- AppHost ask
     (a, (r, b)) <- second f <$> liftHostFrame (runAppHostFrame env ms)
-    tellApp r
+    tell r
     return (a, b)    
     
 
