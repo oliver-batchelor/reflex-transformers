@@ -2,7 +2,15 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ConstraintKinds #-}
 
-module Reflex.Host.App.Class where
+module Reflex.Host.App.Class
+  ( MonadWriter (..)
+  , MapWriter(..)
+  , MonadAppHost (..)
+  , MonadIOHost (..)
+  , IOHost
+  
+  
+  ) where
 
 
 import Data.Dependent.Sum
@@ -16,7 +24,7 @@ import Data.Map.Strict (Map)
 
 import Control.Monad
 import Control.Monad.Reader
-
+import Control.Monad.Writer.Class
 
 import Data.Semigroup
 import Data.Maybe
@@ -27,16 +35,16 @@ import Prelude
 type IOHost t m = (ReflexHost t, MonadReflexCreateTrigger t m, MonadIO m, MonadIO (HostFrame t))
 
   
-class (Monad m, Monoid r) => MonadAppWriter r m | m -> r  where  
- 
-  -- | Writes 'r' to the host, analogous to 'tell' from MonadWriter
-  tellApp :: r -> m ()
-  
-  -- | Collect the result of one writer and return it in another
-  collectApp :: m a -> m (a, r)
+-- class (Monad m, Monoid r) => MonadWriter r m | m -> r  where  
+--  
+--   -- | Writes 'r' to the host, analogous to 'tell' from MonadWriter
+--   tellApp :: r -> m ()
+--   
+--   -- | Collect the result of one writer and return it in another
+--   collectApp :: m a -> m (a, r)
   
 
-class (MonadAppWriter r (m r), MonadAppWriter s (m s)) => MapWriter m s r  where  
+class (MonadWriter r (m r), MonadWriter s (m s)) => MapWriter m s r  where  
   
   -- | Embed one MonadAppWriter in another, a function is used to split the 
   --   result of the inner writer into parts to 'tell' the outer writer
@@ -46,23 +54,23 @@ class (MonadAppWriter r (m r), MonadAppWriter s (m s)) => MapWriter m s r  where
   
 
   
-instance MonadAppHost t r m => MonadAppHost t r (ReaderT e m) where
-  
-  type Host t (ReaderT e m) = Host t m
-  
-  performEvent = lift . performEvent
-  
-  askRunApp = do
-    run <- lift askRunApp
-    e   <- ask
-    return $ run . flip runReaderT e
-    
-  liftHost = lift . liftHost
+-- instance MonadAppHost t r m => MonadAppHost t r (ReaderT e m) where
+--   
+--   type Host t (ReaderT e m) = Host t m
+--   
+--   performEvent = lift . performEvent
+--   
+--   askRunApp = do
+--     run <- lift askRunApp
+--     e   <- ask
+--     return $ run . flip runReaderT e
+--     
+--   liftHost = lift . liftHost
 
 
   
 class (ReflexHost t, MonadFix m, MonadHold t m, MonadHold t (Host t m), MonadFix (Host t m),  
-       MonadAppWriter r m, SwitchMerge t r) => MonadAppHost t r m | m -> t r where
+       MonadWriter r m, SwitchMerge t r) => MonadAppHost t r m | m -> t r where
   type Host t m :: * -> *
     
   -- | Run a monadic host action during or immediately each frame in which the event fires, 

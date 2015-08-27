@@ -5,10 +5,11 @@ module Reflex.Host.App
   ( newExternalEvent, performEventAsync
 
   , Switching (..), SwitchMerge (..)
-  , MonadAppWriter (..), MapWriter (..)
+  , MonadWriter (..), MapWriter (..)
   , MonadAppHost(..)
   , MonadIOHost (..)
 
+  , collect
   , performAppHost, holdAppHost 
   
   
@@ -93,12 +94,17 @@ performEventAsync event = do
 -- getPostBuild = generateEvent (return ())
 
 
-holdApp :: (MonadHold t m, MonadAppWriter r m, Switching t r) => r -> Event t r -> m ()
-holdApp initial updates = tellApp =<< switching initial updates
+holdApp :: (MonadHold t m, MonadWriter r m, Switching t r) => r -> Event t r -> m ()
+holdApp initial updates = tell =<< switching initial updates
 
-holdSwitchMerge :: (MonadHold t m, MonadFix m, MonadAppWriter r m, Ord k, SwitchMerge t r) => Map k r -> Event t (Map k (Maybe r)) -> m ()
-holdSwitchMerge initial updates = tellApp =<< switchMerge initial updates
+holdSwitchMerge :: (MonadHold t m, MonadFix m, MonadWriter r m, Ord k, SwitchMerge t r) => Map k r -> Event t (Map k (Maybe r)) -> m ()
+holdSwitchMerge initial updates = tell =<< switchMerge initial updates
 
+
+collect :: MonadAppHost t r m => m a -> m (a, r)
+collect m = do
+  runApp <- askRunApp
+  liftHost (runApp m)
  
 
 performAppHost :: MonadAppHost t r m => Event t (m a) -> m (Event t a)
@@ -113,7 +119,7 @@ performAppHost mChanged = do
 holdAppHost :: MonadAppHost t r m => m a -> Event t (m a) -> m (Dynamic t a)
 holdAppHost mInit mChanged = do
   runApp <- askRunApp
-  (a, r) <- collectApp mInit
+  (a, r) <- collect mInit
   updates <- performEvent $ runApp <$> mChanged
   holdApp r (snd <$> updates) 
   holdDyn a (fst <$> updates)

@@ -64,19 +64,16 @@ liftHostFrame :: ReflexHost t => HostFrame t a -> AppHost t r a
 liftHostFrame = AppHost . lift . lift
   
  
-instance (Monoid r, ReflexHost t) => MonadAppWriter r (AppHost t r) where
+instance (Monoid r, ReflexHost t) => MonadWriter r (AppHost t r) where
   
-  tellApp r = AppHost $ modify' (r `mappend`) 
-  
-  collectApp ma  = do
-    env <- AppHost ask
-    liftHostFrame $ runAppHostFrame env ma
-
+  tell r = AppHost $ modify' (r `mappend`) 
+ 
+ 
 instance (ReflexHost t, Monoid s, Monoid r) => MapWriter (AppHost t) s r  where  
   mapWriter f ms = do
     env <- AppHost ask
     (a, (r, b)) <- second f <$> liftHostFrame (runAppHostFrame env ms)
-    tellApp r
+    tell r
     return (a, b)    
     
 

@@ -44,7 +44,7 @@ instance MonadHold t (M t) where
   
   
 newtype PureHost t r a = PureHost
-  { unPureHost ::  StateT [r] (M t) a
+  { unPureHost ::  StateT r (M t) a
   }
 
 deriving instance ReflexHost t => Functor (PureHost t r)
@@ -55,9 +55,9 @@ deriving instance ReflexHost t => MonadSample t (PureHost t r)
 deriving instance ReflexHost t => MonadFix (PureHost t r)  
 
   
-instance (ReflexHost t, Monoid r) => MonadAppWriter r (PureHost t r) where
-  tellApp r = PureHost $ modify (r:) 
-  collectApp ma = liftHoldPure (runPureHost ma)
+instance (ReflexHost t, Monoid r) => MonadWriter r (PureHost t r) where
+  tell r = PureHost $ modify' (r `mappend`) 
+--   collectApp ma = liftHoldPure (runPureHost ma)
     
  
 liftHoldPure :: (Reflex t) => (forall n. (MonadHold t n, MonadFix n) => n a) -> PureHost t r a
@@ -65,9 +65,8 @@ liftHoldPure ma = PureHost $ lift (M ma)
 
 
 runPureHost :: (MonadHold t m, MonadFix m, Monoid r) => PureHost t r a -> m (a, r)
-runPureHost app = do 
-  (a, r) <- unM . flip runStateT [] . unPureHost $ app
-  return (a, mconcat r)
+runPureHost app =  unM . flip runStateT mempty . unPureHost $ app
+
 
 execPureHost :: (MonadHold t m, MonadFix m, Monoid r) => PureHost t r a -> m r
 execPureHost app = snd <$> runPureHost app
@@ -84,7 +83,7 @@ instance (ReflexHost t, SwitchMerge t r, Monoid r) => MonadAppHost t r (PureHost
 instance (ReflexHost t, Monoid s, Monoid r) => MapWriter (PureHost t) s r  where  
   mapWriter f ms = do
     (a, (r, b)) <- second f <$> liftHoldPure (runPureHost ms)
-    tellApp r
+    tell r
     return (a, b)
     
 

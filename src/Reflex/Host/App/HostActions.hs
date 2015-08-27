@@ -95,23 +95,23 @@ instance HasHostActions t (HostActions t) where
   fromActions = id
   
 {-# INLINEABLE tellActions #-}
-tellActions :: (ReflexHost t, MonadAppWriter r m, HasHostActions t r) => HostActions t -> m ()
-tellActions = tellApp . fromActions
+tellActions :: (ReflexHost t, MonadWriter r m, HasHostActions t r) => HostActions t -> m ()
+tellActions = tell . fromActions
 
-performActions_ :: (ReflexHost t, MonadAppWriter r m, HasHostActions t r) =>  Event t (HostFrame t ()) -> m ()
+performActions_ :: (ReflexHost t, MonadWriter r m, HasHostActions t r) =>  Event t (HostFrame t ()) -> m ()
 performActions_  = tellActions . makePerform_
 
-scheduleActions :: (IOHost t m, MonadAppWriter r m, HasHostActions t r) => HostFrame t a -> m (Event t a)
+scheduleActions :: (IOHost t m, MonadWriter r m, HasHostActions t r) => HostFrame t a -> m (Event t a)
 scheduleActions actions = do 
   (event, construct) <- newEventWithConstructor
   tellActions . makePostBuild $ liftIO . construct =<< actions
   return event
 
-scheduleActions_ :: (ReflexHost t, MonadAppWriter r m, HasHostActions t r) => HostFrame t () -> m ()
+scheduleActions_ :: (ReflexHost t, MonadWriter r m, HasHostActions t r) => HostFrame t () -> m ()
 scheduleActions_ action = tellActions . makePostBuild $ action >> pure mempty
   
   
-performActions :: (IOHost t m,  MonadAppWriter r m, HasHostActions t r) =>  Event t (HostFrame t a) -> m (Event t a)
+performActions :: (IOHost t m,  MonadWriter r m, HasHostActions t r) =>  Event t (HostFrame t a) -> m (Event t a)
 performActions e = do 
   (event, construct) <- newEventWithConstructor
   tellActions . makePerform $ (liftIO . construct =<<) <$> e
