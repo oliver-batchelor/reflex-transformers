@@ -62,7 +62,9 @@ liftHostFrame = AppHost . lift . lift
   
  
 instance (Monoid r, ReflexHost t) => MonadWriter r (AppHost t r) where  
-  tell r = AppHost $ modify (mappend r) 
+  
+  {-# INLINEABLE tell #-}
+  tell r = AppHost $ modify (r `mappend`) 
   listen m = do
     env <- AppHost ask
     (a, r) <- liftHostFrame $ runAppHostFrame env m
@@ -95,12 +97,15 @@ instance (SwitchMerge t r, MonadIO (HostFrame t), Monoid r, ReflexHost t, HasHos
           
   type Host t (AppHost t r) = HostFrame t
   
+  {-# INLINEABLE performEvent #-}
   performEvent = performActions
    
+  {-# INLINEABLE askRunApp #-} 
   askRunApp = AppHost $ do
     env <- ask
     return (runAppHostFrame env)
    
+  {-# INLINEABLE liftHost #-}  
   liftHost = liftHostFrame
   
     

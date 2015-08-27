@@ -39,10 +39,6 @@ class (MonadWriter r (m r), MonadWriter s (m s)) => MapWriter m s r  where
   mapWriter :: (s -> (r, b)) -> m s a -> m r (a, b) 
   
   
-appendApp :: MapWriter m (r, s) r => m (r, s) a -> m r (a, s)
-appendApp = mapWriter id
-
-
 
   
 class (ReflexHost t, MonadFix m, MonadHold t m, MonadHold t (Host t m), MonadFix (Host t m),  

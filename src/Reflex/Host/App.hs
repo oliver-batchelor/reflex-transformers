@@ -96,10 +96,11 @@ holdSwitchMerge :: (MonadHold t m, MonadFix m, MonadWriter r m, Ord k, SwitchMer
 holdSwitchMerge initial updates = tell =<< switchMerge initial updates
 
 
-collect :: MonadWriter r m => m a -> m (a, r)
-collect m = pass $ do
-  a <- listen m
-  return (a, const mempty)
+collect :: MonadAppHost t r m => m a -> m (a, r)
+collect m = do
+  runApp <- askRunApp
+  liftHost (runApp m)
+
  
 
 performAppHost :: MonadAppHost t r m => Event t (m a) -> m (Event t a)

@@ -83,7 +83,6 @@ library
     Reflex.Host.App.Switching
     Reflex.Host.App.Util
 
-  ghc-options: -Wall -O2 -threaded
 
 
 test-suite doctests
