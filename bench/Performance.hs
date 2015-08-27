@@ -84,6 +84,7 @@ main :: IO ()
 main = defaultMain 
   [ benchN 4 50
   , benchN 4 100
+  , benchN 16 50
   ]
   
   where

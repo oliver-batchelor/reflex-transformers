@@ -15,7 +15,9 @@ import Reflex.Host.App.Switching
 import Data.Map.Strict (Map)
 
 import Control.Monad
-import Control.Monad.State.Strict
+import Control.Monad.Reader
+
+
 import Data.Semigroup
 import Data.Maybe
 import Data.Foldable
@@ -42,8 +44,20 @@ class (MonadAppWriter r (m r), MonadAppWriter s (m s)) => MapWriter m s r  where
   mapWriter :: (s -> (r, b)) -> m s a -> m r (a, b) 
   
   
-appendApp :: MapWriter m (r, s) r => m (r, s) a -> m r (a, s)
-appendApp = mapWriter id
+
+  
+instance MonadAppHost t r m => MonadAppHost t r (ReaderT e m) where
+  
+  type Host t (ReaderT e m) = Host t m
+  
+  performEvent = lift . performEvent
+  
+  askRunApp = do
+    run <- lift askRunApp
+    e   <- ask
+    return $ run . flip runReaderT e
+    
+  liftHost = lift . liftHost
 
 
   
@@ -80,10 +94,3 @@ class (MonadAppHost t r m, MonadIO m, MonadIO (Host t m),
   -- | Run host action for it's effects after construction, 
   -- return the result in an Event.
   schedulePostBuild :: Host t m a -> m (Event t a)
-  
-  
--- deriving creates an error requiring ImpredicativeTypes
-instance (Reflex t, MonadReflexCreateTrigger t m) => MonadReflexCreateTrigger t (StateT s m) where
-  newEventWithTrigger initializer = lift $ newEventWithTrigger initializer
-  newFanEventWithTrigger initializer = lift $ newFanEventWithTrigger initializer
-  
