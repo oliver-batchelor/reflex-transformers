@@ -5,6 +5,7 @@
 module Reflex.Host.App.Class
   ( MonadWriter (..)
   , MapWriter(..)
+  , censor
   , MonadAppHost (..)
   , MonadIOHost (..)
   , IOHost
@@ -40,7 +41,6 @@ class (MonadWriter r (m r), MonadWriter s (m s)) => MapWriter m s r  where
   mapWriter :: (s -> (r, b)) -> m s a -> m r (a, b) 
   
   
-
   
 instance MonadAppHost t r m => MonadAppHost t r (ReaderT e m) where
   

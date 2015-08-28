@@ -6,6 +6,8 @@ module Reflex.Host.App
 
   , Switching (..), SwitchMerge (..)
   , MonadWriter (..), MapWriter (..)
+  , censor
+  
   , MonadAppHost(..)
   , MonadIOHost (..)
 
@@ -37,7 +39,6 @@ import Reflex.Host.App.Class
 import Reflex.Host.App.Util
 
 import Reflex.Host.App.HostActions
-import Reflex.Host.App.Switching
 
 import Data.Map (Map)
 

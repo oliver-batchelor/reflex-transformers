@@ -89,8 +89,6 @@ instance (ReflexHost t, SwitchMerge t r, Monoid r) => MonadAppHost t r (PureHost
   liftHost (M m) = liftPureHost m
   askRunAppHost = return $ \m -> M (runPureHost m)
 
-
-  
   
   
 instance (ReflexHost t, Monoid s, Monoid r) => MapWriter (PureHost t) s r  where  

@@ -45,15 +45,8 @@ deriving instance ReflexHost t => MonadSample t (AppHost t r)
 deriving instance ReflexHost t => MonadReflexCreateTrigger t (AppHost t r)
 deriving instance (MonadIO (HostFrame t), ReflexHost t) => MonadIO (AppHost t r)
 deriving instance ReflexHost t => MonadFix (AppHost t r)
- 
--- instance MonadSample t m => MonadSample t (StateT s m) where
---   sample = lift . sample
--- 
--- instance MonadHold t m => MonadHold t (StateT s m) where
---   hold init = lift . hold init  
 
--- | Run the application host monad in a reflex host frame and return the produced
--- application info.
+
 
 {-# INLINEABLE runAppHostFrame #-}
 runAppHostFrame :: (ReflexHost t, Monoid r) => Chan (AppInputs t) -> AppHost t r a -> HostFrame t (a, r)

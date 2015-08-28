@@ -11,6 +11,8 @@ import Reflex.Host.App.Switching
 import Reflex.Host.App.Class
 
 import Control.Monad
+import Control.Lens
+
 import Control.Monad.IO.Class
 import Data.Semigroup.Applicative
 import Data.Semigroup
@@ -88,15 +90,15 @@ mergeHostActions e = getApp <$> mergeEvents e
 
   
 class HasHostActions t r | r -> t where
-  fromActions :: HostActions t -> r
+  actions :: Lens' r (HostActions t)
  
 instance HasHostActions t (HostActions t) where
-  {-# INLINE fromActions #-}
-  fromActions = id
+
+  actions = iso id id
   
 {-# INLINEABLE tellActions #-}
 tellActions :: (ReflexHost t, MonadWriter r m, HasHostActions t r) => HostActions t -> m ()
-tellActions = tell . fromActions
+tellActions a = tell (mempty & actions .~ a)
 
 performActions_ :: (ReflexHost t, MonadWriter r m, HasHostActions t r) =>  Event t (HostFrame t ()) -> m ()
 performActions_  = tellActions . makePerform_
