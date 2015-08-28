@@ -94,7 +94,7 @@ class HasHostActions t r | r -> t where
  
 instance HasHostActions t (HostActions t) where
 
-  actions = lens id const
+  actions = lens id (const id)
   
 {-# INLINEABLE tellActions #-}
 tellActions :: (ReflexHost t, MonadWriter r m, HasHostActions t r) => HostActions t -> m ()
@@ -104,9 +104,9 @@ performActions_ :: (ReflexHost t, MonadWriter r m, HasHostActions t r) =>  Event
 performActions_  = tellActions . makePerform_
 
 scheduleActions :: (IOHost t m, MonadWriter r m, HasHostActions t r) => HostFrame t a -> m (Event t a)
-scheduleActions actions = do 
+scheduleActions a = do 
   (event, construct) <- newEventWithConstructor
-  tellActions . makePostBuild $ liftIO . construct =<< actions
+  tellActions . makePostBuild $ liftIO . construct =<< a
   return event
 
 scheduleActions_ :: (ReflexHost t, MonadWriter r m, HasHostActions t r) => HostFrame t () -> m ()
