@@ -94,7 +94,7 @@ class HasHostActions t r | r -> t where
  
 instance HasHostActions t (HostActions t) where
 
-  actions = lens id (const id)
+  actions = lens id const
   
 {-# INLINEABLE tellActions #-}
 tellActions :: (ReflexHost t, MonadWriter r m, HasHostActions t r) => HostActions t -> m ()
