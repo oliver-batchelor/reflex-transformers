@@ -100,17 +100,17 @@ holdApp initial updates = tell =<< switching initial updates
 holdSwitchMerge :: (MonadHold t m, MonadFix m, MonadWriter r m, Ord k, SwitchMerge t r) => Map k r -> Event t (Map k (Maybe r)) -> m ()
 holdSwitchMerge initial updates = tell =<< switchMerge initial updates
 
-
+  
 collect :: MonadAppHost t r m => m a -> m (a, r)
 collect m = do
-  runApp <- askRunApp
-  liftHost (runApp m)
+  runAppHost <- askRunAppHost
+  liftHost (runAppHost m)  
  
 
 performAppHost :: MonadAppHost t r m => Event t (m a) -> m (Event t a)
 performAppHost mChanged = do 
-  runApp <- askRunApp
-  updates <- performEvent $ runApp <$> mChanged
+  runAppHost <- askRunAppHost
+  updates <- performEvent $ runAppHost <$> mChanged
   holdApp mempty (snd <$> updates) 
   return (fst <$> updates)
 
@@ -118,9 +118,9 @@ performAppHost mChanged = do
 -- -- action.
 holdAppHost :: MonadAppHost t r m => m a -> Event t (m a) -> m (Dynamic t a)
 holdAppHost mInit mChanged = do
-  runApp <- askRunApp
+  runAppHost <- askRunAppHost
   (a, r) <- collect mInit
-  updates <- performEvent $ runApp <$> mChanged
+  updates <- performEvent $ runAppHost <$> mChanged
   holdApp r (snd <$> updates) 
   holdDyn a (fst <$> updates)
   

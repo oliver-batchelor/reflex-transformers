@@ -9,6 +9,8 @@ module Reflex.Host.App.Class
   , MonadIOHost (..)
   , IOHost
   
+  , module Reflex.Host.App.Switching
+  
   
   ) where
 
@@ -19,31 +21,17 @@ import Reflex.Class hiding (constant)
 import Reflex.Host.Class
 
 import Reflex.Host.App.Switching
-
 import Data.Map.Strict (Map)
 
 import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.Writer.Class
 
-import Data.Semigroup
-import Data.Maybe
-import Data.Foldable
-
 import Prelude
 
 type IOHost t m = (ReflexHost t, MonadReflexCreateTrigger t m, MonadIO m, MonadIO (HostFrame t))
 
   
--- class (Monad m, Monoid r) => MonadWriter r m | m -> r  where  
---  
---   -- | Writes 'r' to the host, analogous to 'tell' from MonadWriter
---   tellApp :: r -> m ()
---   
---   -- | Collect the result of one writer and return it in another
---   collectApp :: m a -> m (a, r)
-  
-
 class (MonadWriter r (m r), MonadWriter s (m s)) => MapWriter m s r  where  
   
   -- | Embed one MonadAppWriter in another, a function is used to split the 
@@ -54,18 +42,18 @@ class (MonadWriter r (m r), MonadWriter s (m s)) => MapWriter m s r  where
   
 
   
--- instance MonadAppHost t r m => MonadAppHost t r (ReaderT e m) where
---   
---   type Host t (ReaderT e m) = Host t m
---   
---   performEvent = lift . performEvent
---   
---   askRunApp = do
---     run <- lift askRunApp
---     e   <- ask
---     return $ run . flip runReaderT e
---     
---   liftHost = lift . liftHost
+instance MonadAppHost t r m => MonadAppHost t r (ReaderT e m) where
+  
+  type Host t (ReaderT e m) = Host t m
+  
+  performEvent = lift . performEvent
+  
+  askRunAppHost = do
+    runAppHost <- lift askRunAppHost
+    e   <- ask
+    return $ runAppHost . flip runReaderT e
+    
+  liftHost = lift . liftHost
 
 
   
@@ -80,11 +68,12 @@ class (ReflexHost t, MonadFix m, MonadHold t m, MonadHold t (Host t m), MonadFix
   
   -- | Return a funtion to run a MonadApp action in it's Host 
   -- return it's MonadAppWriter contents.
-  askRunApp :: m (m a -> Host t m (a, r)) 
+  askRunAppHost :: m (m a -> Host t m (a, r)) 
   
   -- | Lift a Host action to a MonadApp action
   liftHost :: Host t m a -> m a
   
+
 
 class (MonadAppHost t r m, MonadIO m, MonadIO (Host t m), 
       MonadReflexCreateTrigger t m) => MonadIOHost t r m | m -> t r  where

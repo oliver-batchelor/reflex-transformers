@@ -57,11 +57,20 @@ deriving instance ReflexHost t => MonadFix (PureHost t r)
   
 instance (ReflexHost t, Monoid r) => MonadWriter r (PureHost t r) where
   tell r = PureHost $ modify' (r `mappend`) 
---   collectApp ma = liftHoldPure (runPureHost ma)
-    
+
+  listen m = do
+    (a, r) <- liftPureHost (runPureHost m)
+    tell r
+    return (a, r)
+  
+  pass m = do
+    ((a, f), r) <- liftPureHost (runPureHost m)
+    tell (f r)
+    return a  
+  
  
-liftHoldPure :: (Reflex t) => (forall n. (MonadHold t n, MonadFix n) => n a) -> PureHost t r a
-liftHoldPure ma = PureHost $ lift (M ma)
+liftPureHost :: (Reflex t) => (forall n. (MonadHold t n, MonadFix n) => n a) -> PureHost t r a
+liftPureHost ma = PureHost $ lift (M ma)
 
 
 runPureHost :: (MonadHold t m, MonadFix m, Monoid r) => PureHost t r a -> m (a, r)
@@ -77,12 +86,16 @@ instance (ReflexHost t, SwitchMerge t r, Monoid r) => MonadAppHost t r (PureHost
   type Host t (PureHost t r) = M t
   
   performEvent e = return $ push (fmap Just . unM) e
-  liftHost (M m) = liftHoldPure m
-  askRunApp = return $ \m -> M (runPureHost m)
+  liftHost (M m) = liftPureHost m
+  askRunAppHost = return $ \m -> M (runPureHost m)
+
+
+  
+  
   
 instance (ReflexHost t, Monoid s, Monoid r) => MapWriter (PureHost t) s r  where  
   mapWriter f ms = do
-    (a, (r, b)) <- second f <$> liftHoldPure (runPureHost ms)
+    (a, (r, b)) <- second f <$> liftPureHost (runPureHost ms)
     tell r
     return (a, b)
     

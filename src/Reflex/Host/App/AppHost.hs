@@ -3,7 +3,14 @@
 {-# LANGUAGE ImpredicativeTypes #-}  -- For deriving MonadReflexCreateTrigger
 
 
-module Reflex.Host.App.AppHost where
+module Reflex.Host.App.AppHost 
+  ( AppHost
+  , hostApp
+  , initHostApp
+  
+  , module  Reflex.Host.App.HostActions
+  
+  ) where
 
 import Control.Applicative
 import Control.Concurrent
@@ -19,9 +26,6 @@ import Reflex.Class hiding (constant)
 import Reflex.Host.Class
 import Reflex.Host.App.Class
 import Reflex.Host.App.HostActions
-import Reflex.Host.App.Switching
-
-
 
 import Prelude
 
@@ -64,9 +68,23 @@ liftHostFrame :: ReflexHost t => HostFrame t a -> AppHost t r a
 liftHostFrame = AppHost . lift . lift
   
  
+ 
+ 
 instance (Monoid r, ReflexHost t) => MonadWriter r (AppHost t r) where
   
   tell r = AppHost $ modify' (r `mappend`) 
+  listen m = do
+    env <- AppHost ask
+    (a, r) <- liftHostFrame $ runAppHostFrame env m
+    tell r
+    return (a, r)
+  
+  pass m = do
+    env <- AppHost ask
+    ((a, f), r) <- liftHostFrame $ runAppHostFrame env m
+    tell (f r)
+    return a
+  
  
  
 instance (ReflexHost t, Monoid s, Monoid r) => MapWriter (AppHost t) s r  where  
@@ -87,7 +105,7 @@ instance (SwitchMerge t r, MonadIO (HostFrame t), Monoid r, ReflexHost t, HasHos
   
   performEvent = performActions
    
-  askRunApp = AppHost $ do
+  askRunAppHost = AppHost $ do
     env <- ask
     return (runAppHostFrame env)
    
