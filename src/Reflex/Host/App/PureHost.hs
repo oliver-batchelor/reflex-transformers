@@ -8,11 +8,7 @@ import Data.Bifunctor
 
 import Data.Maybe
 import Reflex.Class hiding (constant)
-import Reflex.Host.Class
-
-
 import Reflex.Host.App.Class
-import Reflex.Host.App.Switching
 
 import Prelude
 
@@ -47,15 +43,15 @@ newtype PureHost t r a = PureHost
   { unPureHost ::  StateT r (M t) a
   }
 
-deriving instance ReflexHost t => Functor (PureHost t r)
-deriving instance ReflexHost t => Applicative (PureHost t r)
-deriving instance ReflexHost t => Monad (PureHost t r)
-deriving instance ReflexHost t => MonadHold t (PureHost t r)
-deriving instance ReflexHost t => MonadSample t (PureHost t r)
-deriving instance ReflexHost t => MonadFix (PureHost t r)  
+deriving instance Reflex t => Functor (PureHost t r)
+deriving instance Reflex t => Applicative (PureHost t r)
+deriving instance Reflex t => Monad (PureHost t r)
+deriving instance Reflex t => MonadHold t (PureHost t r)
+deriving instance Reflex t => MonadSample t (PureHost t r)
+deriving instance Reflex t => MonadFix (PureHost t r)  
 
   
-instance (ReflexHost t, Monoid r) => MonadWriter r (PureHost t r) where
+instance (Reflex t, Monoid r) => MonadWriter r (PureHost t r) where
   tell r = PureHost $ modify' (r `mappend`) 
 
   listen m = do
@@ -81,7 +77,7 @@ execPureHost :: (MonadHold t m, MonadFix m, Monoid r) => PureHost t r a -> m r
 execPureHost app = snd <$> runPureHost app
   
   
-instance (ReflexHost t, SwitchMerge t r, Monoid r) => MonadAppHost t r (PureHost t r) where
+instance (Reflex t, SwitchMerge t r, Monoid r) => MonadAppHost t r (PureHost t r) where
   
   type Host t (PureHost t r) = M t
   
@@ -91,7 +87,7 @@ instance (ReflexHost t, SwitchMerge t r, Monoid r) => MonadAppHost t r (PureHost
 
   
   
-instance (ReflexHost t, Monoid s, Monoid r) => MapWriter (PureHost t) s r  where  
+instance (Reflex t, Monoid s, Monoid r) => MapWriter (PureHost t) s r  where  
   mapWriter f ms = do
     (a, (r, b)) <- second f <$> liftPureHost (runPureHost ms)
     tell r

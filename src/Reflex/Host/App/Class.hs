@@ -22,7 +22,6 @@ import Reflex.Class hiding (constant)
 import Reflex.Host.Class
 
 import Reflex.Host.App.Switching
-import Data.Map.Strict (Map)
 
 import Control.Monad
 import Control.Monad.Reader
@@ -57,7 +56,7 @@ instance MonadAppHost t r m => MonadAppHost t r (ReaderT e m) where
 
 
   
-class (ReflexHost t, MonadFix m, MonadHold t m, MonadHold t (Host t m), MonadFix (Host t m),  
+class (Reflex t, MonadFix m, MonadHold t m, MonadHold t (Host t m), MonadFix (Host t m),  
        MonadWriter r m, SwitchMerge t r) => MonadAppHost t r m | m -> t r where
   type Host t m :: * -> *
     
@@ -75,7 +74,7 @@ class (ReflexHost t, MonadFix m, MonadHold t m, MonadHold t (Host t m), MonadFix
   
 
 
-class (MonadAppHost t r m, MonadIO m, MonadIO (Host t m), 
+class (ReflexHost t, MonadAppHost t r m, MonadIO m, MonadIO (Host t m), 
       MonadReflexCreateTrigger t m) => MonadIOHost t r m | m -> t r  where
         
   -- | Return a function to post events via IO to a fifo Event queue.

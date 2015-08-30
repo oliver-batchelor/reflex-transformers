@@ -36,7 +36,7 @@ newtype AppHost t r a = AppHost
   { unAppHost :: ReaderT (Chan (AppInputs t)) (StateT r (HostFrame t))  a
   }
 
-  
+   
 deriving instance ReflexHost t => Functor (AppHost t r)
 deriving instance ReflexHost t => Applicative (AppHost t r)
 deriving instance ReflexHost t => Monad (AppHost t r)
@@ -61,34 +61,34 @@ liftHostFrame :: ReflexHost t => HostFrame t a -> AppHost t r a
 liftHostFrame = AppHost . lift . lift
   
  
+collectAppHost :: (ReflexHost t, Monoid r) => AppHost t r a -> AppHost t s (a, r)
+collectAppHost m = do
+    env <- AppHost ask
+    liftHostFrame $ runAppHostFrame env m
  
  
 instance (Monoid r, ReflexHost t) => MonadWriter r (AppHost t r) where
   
   tell r = AppHost $ modify' (r `mappend`) 
   listen m = do
-    env <- AppHost ask
-    (a, r) <- liftHostFrame $ runAppHostFrame env m
+    (a, r) <- collectAppHost m
     tell r
     return (a, r)
   
   pass m = do
-    env <- AppHost ask
-    ((a, f), r) <- liftHostFrame $ runAppHostFrame env m
+    ((a, f), r) <- collectAppHost m
     tell (f r)
     return a
   
  
  
 instance (ReflexHost t, Monoid s, Monoid r) => MapWriter (AppHost t) s r  where  
-  mapWriter f ms = do
-    env <- AppHost ask
-    (a, (r, b)) <- second f <$> liftHostFrame (runAppHostFrame env ms)
+  mapWriter f m = do
+    (a, (r, b)) <- second f <$> collectAppHost m
     tell r
     return (a, b)    
     
 
-     
 
   
 instance (SwitchMerge t r, MonadIO (HostFrame t), Monoid r, ReflexHost t, HasHostActions t r) 
@@ -106,7 +106,9 @@ instance (SwitchMerge t r, MonadIO (HostFrame t), Monoid r, ReflexHost t, HasHos
   
     
 
-instance (HasHostActions t r, MonadIO (HostFrame t), MonadAppHost t r (AppHost t r)) => MonadIOHost t r (AppHost t r) where
+instance (ReflexHost t, HasHostActions t r, MonadIO (HostFrame t), MonadAppHost t r (AppHost t r)) 
+         => MonadIOHost t r (AppHost t r) where
+           
     askPostAsync = AppHost $ do
       chan <- ask
       return $ liftIO . writeChan chan    

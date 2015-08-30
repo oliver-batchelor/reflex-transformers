@@ -3,14 +3,11 @@
 
 module Reflex.Host.App.Switching where
 
-import Data.Dependent.Sum
 
 import Reflex.Class hiding (constant)
 import Reflex.Dynamic
+import Reflex.Host.App.Util
 
-import Control.Lens
-
-import qualified Data.Map as Map
 import Data.Map (Map)
 
 import Control.Monad
@@ -64,29 +61,29 @@ mergeBehaviors = mconcat . unBehaviors
 
 
 instance (Monoid a, Reflex t) => Switching t (Behaviors t a)  where
-  switching bs updates = behaviors <$> switcher (mergeBehaviors bs) (mergeBehaviors <$> updates)
+  switching bs updates = behaviors <$> switching (mergeBehaviors bs) (mergeBehaviors <$> updates)
 
 instance (Semigroup a, Reflex t) => Switching t (Events t a) where
-  switching es updates = events <$> switchPromptly (mergeEvents es) (mergeEvents <$> updates)
+  switching es updates = events <$> switching (mergeEvents es) (mergeEvents <$> updates)
   
-  
-patchMap :: (MonadHold t m, MonadFix m, Reflex t, Ord k) => Map k a -> Event t (Map k (Maybe a)) -> m (Dynamic t (Map k a))
-patchMap initial changes = foldDyn (flip (ifoldr modify)) initial changes
-  
-  where 
-    modify k Nothing items = Map.delete k items
-    modify k (Just item) items = Map.insert k item items  
+    
+instance (Monoid a, Reflex t) => Switching t (Behavior t a)  where
+  switching = switcher
+    
+instance (Semigroup a, Reflex t) => Switching t (Event t a) where
+  switching e updates = switch <$> hold e updates
     
     
 -- This will hopefully become a primitive (faster!)
-switchMergeEvents ::  (MonadFix m, MonadHold t m, Reflex t, Ord k) =>  Map k (Event t a) -> Event t (Map k (Maybe (Event t a))) -> m (Event t (Map k a))
-switchMergeEvents initial updates = switch . fmap (mergeMap) . current <$> patchMap initial updates 
+switchMergeEvents ::  (MonadFix m, MonadHold t m, Reflex t, Ord k) =>  MapChanges t k (Event t a) -> m (Event t (Map k a))
+switchMergeEvents mapChanges = switch . fmap mergeMap . current <$> patchMap mapChanges 
 
+instance (Semigroup a, Reflex t) => SwitchMerge t (Event t a) where
+  switchMerge initial updates = fmap (foldl1 (<>)) <$> switchMergeEvents (initial, updates)
   
 instance (Semigroup a, Reflex t) => SwitchMerge t (Events t a) where
-  switchMerge initial updates = do 
-    e <- switchMergeEvents  (mergeEvents <$> initial) (fmap (fmap mergeEvents) <$> updates)
-    return $ events (foldl1 (<>) <$> e)
+  switchMerge initial updates = events <$> switchMerge (mergeEvents <$> initial) (fmap (fmap mergeEvents) <$> updates)
+
      
     
     

@@ -28,49 +28,6 @@ import Criterion.Main
 import System.Exit
 
 
-patchMap :: (MonadAppHost t r m, Ord k) => Map k a -> Event t (Map k (Maybe a)) -> m (Dynamic t (Map k a))
-patchMap initial changes = foldDyn (flip (ifoldr modify)) initial changes
-  
-  where 
-    modify k Nothing items = Map.delete k items
-    modify k (Just item) items = Map.insert k item items
-
-
-
-        
-diffKeys :: (Ord k) => Map k a -> Map k b -> Map k (Maybe b)
-diffKeys m m' = (Just <$> m' Map.\\ m)  <> (const Nothing <$>  m Map.\\ m')  
-     
-     
-     
-diffInput :: (Reflex t, Ord k) => Behavior t (Map k a) -> Event t (Map k b) -> Event t (Map k (Maybe b))
-diffInput currentItems updatedItems = ffilter (not . Map.null) $ 
-  attachWith diffKeys currentItems updatedItems
-        
-
-      
-domList :: (MonadAppHost t r m, Ord k, Show k) => Dynamic t (Map k (m a)) ->  m (Dynamic t (Map k a))
-domList input  = do
-  runAppHost <- askRunAppHost
-  initial <- mapM collect =<< sample (current input)
-  
-  let changes = diffInput (current input) (updated input)
-
-  viewChanges <- performEvent $ mapMOf (traverse . _Just) runAppHost <$> changes
-
-  holdSwitchMerge (snd <$> initial) (fmap (fmap snd) <$> viewChanges)
-  patchMap (fst <$> initial) (fmap (fmap fst) <$> viewChanges)
-  
-  
-
-  
-listWithKey :: (MonadAppHost t r m, Ord k, Show k) => Dynamic t (Map k v) -> (k -> Dynamic t v ->  m a) ->  m (Dynamic t (Map k a))
-listWithKey d view =  do
-  views <- mapDyn (Map.mapWithKey itemView) d
-  domList views
-
-  where
-    itemView k v = holdDyn v (fmapMaybe (Map.lookup k) (updated d)) >>= view k
   
 
 dummyView :: (MonadIOHost t r m, Show a) => Dynamic t a -> m ()  

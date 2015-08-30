@@ -12,13 +12,13 @@ module Reflex.Host.App
   , MonadIOHost (..)
 
   , collect
-  , performAppHost, holdAppHost 
+  , switchAppHost, holdAppHost
+  , listWithKey
   
   
   , HostActions
   , Events, Behaviors
   
-  , holdApp, holdSwitchMerge
   , postQuit
   
   , events, mergeEvents
@@ -29,8 +29,8 @@ module Reflex.Host.App
 import Control.Applicative
 import Control.Concurrent
 import Control.Monad
-import Control.Monad.Fix
 import Control.Monad.Trans
+import Control.Lens
 
 import Data.Monoid
 import Reflex.Class
@@ -41,6 +41,7 @@ import Reflex.Host.App.Util
 import Reflex.Host.App.HostActions
 
 import Data.Map (Map)
+import qualified Data.Map as Map
 
 
 
@@ -78,29 +79,6 @@ performEventAsync event = do
   
    
 
--- | Run a HostFrame action after application setup is complete and fire an event with the
--- result.
---
--- Typical use is sampling from Dynamics/Behaviors and providing the result in an Event
--- more convenient to use.
--- generateEvent ::  (HasPostBuild t m) => HostFrame t a -> m (Event t a)
--- generateEvent action = do
---   (event, construct) <- newEventWithConstructor
---   generatePostBuild $ liftIO . construct =<< action
---   return event
--- 
--- -- | Provide an event which is triggered directly after the initial setup of the
--- -- application is completed.
--- getPostBuild ::  (HasPostBuild t m) => m (Event t ())
--- getPostBuild = generateEvent (return ())
-
-
-holdApp :: (MonadHold t m, MonadWriter r m, Switching t r) => r -> Event t r -> m ()
-holdApp initial updates = tell =<< switching initial updates
-
-holdSwitchMerge :: (MonadHold t m, MonadFix m, MonadWriter r m, Ord k, SwitchMerge t r) => Map k r -> Event t (Map k (Maybe r)) -> m ()
-holdSwitchMerge initial updates = tell =<< switchMerge initial updates
-
   
 collect :: MonadAppHost t r m => m a -> m (a, r)
 collect m = do
@@ -108,20 +86,47 @@ collect m = do
   liftHost (runAppHost m)  
  
 
-performAppHost :: MonadAppHost t r m => Event t (m a) -> m (Event t a)
-performAppHost mChanged = do 
+switchAppHost :: MonadAppHost t r m => Event t (m a) -> m (Event t a)
+switchAppHost mChanged = do 
   runAppHost <- askRunAppHost
   updates <- performEvent $ runAppHost <$> mChanged
-  holdApp mempty (snd <$> updates) 
+  tell =<< switching mempty (snd <$> updates) 
   return (fst <$> updates)
 
--- -- | Like 'switchAppHost', but taking the initial postBuild action from another host
--- -- action.
+-- | Like 'widgetSwitch', but taking the initial postBuild action from another host
+-- action.
 holdAppHost :: MonadAppHost t r m => m a -> Event t (m a) -> m (Dynamic t a)
 holdAppHost mInit mChanged = do
   runAppHost <- askRunAppHost
   (a, r) <- collect mInit
   updates <- performEvent $ runAppHost <$> mChanged
-  holdApp r (snd <$> updates) 
+  tell =<< switching r (snd <$> updates) 
   holdDyn a (fst <$> updates)
   
+
+
+        
+performList :: (MonadAppHost t r m, Ord k, Show k) => MapChanges t k (m a) -> m (MapChanges t k a)
+performList (initial, updates) = do
+  runAppHost <- askRunAppHost
+  initialViews <- mapM collect initial
+  
+  updatedViews <- performEvent $ mapMOf (traverse . _Just) runAppHost <$> updates
+  
+  tell =<< switchMerge (snd <$> initialViews) (fmap (fmap snd) <$> updatedViews)
+  return (fst <$> initialViews, fmap (fmap fst) <$> updatedViews)
+
+  
+
+listWithKey :: (MonadAppHost t r m, Ord k, Show k) => Dynamic t (Map k v) -> (k -> Dynamic t v ->  m a) ->  m (Dynamic t (Map k a))
+listWithKey input childView =  do
+  inputViews <- mapDyn (Map.mapWithKey itemView) input
+  let updates = diffKeys (current inputViews) (updated inputViews)  
+
+  initial <- sample (current inputViews)
+  patchMap =<< performList (initial, updates)
+  
+  where
+    itemView k v = holdDyn v (fmapMaybe (Map.lookup k) (updated input)) >>= childView k  
+    
+ 
