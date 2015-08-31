@@ -8,7 +8,7 @@ import Reflex.Class hiding (constant)
 import Reflex.Dynamic
 import Reflex.Host.App.Util
 
-import Data.Map (Map)
+import Data.Map.Strict (Map)
 
 import Control.Monad
 import Control.Monad.Fix
@@ -44,17 +44,19 @@ instance (SwitchMerge t a, SwitchMerge t b) => SwitchMerge t (a, b) where
 newtype Behaviors t a = Behaviors { unBehaviors :: [Behavior t a] } deriving (Monoid, Semigroup)
 newtype Events t a = Events { unEvents :: [Event t a] } deriving (Monoid, Semigroup)
 
-
+{-# INLINE events #-}
 events :: Event t a -> Events t a
 events = Events . pure
 
-
+{-# INLINE mergeEvents #-}
 mergeEvents :: (Reflex t, Semigroup a) => Events t a -> Event t a
 mergeEvents = mergeWith (<>) . unEvents
 
+{-# INLINE behaviors #-}
 behaviors :: Behavior t a -> Behaviors t a
 behaviors = Behaviors . pure
 
+{-# INLINE mergeBehaviors #-}
 mergeBehaviors :: (Reflex t, Monoid a) => Behaviors t a -> Behavior t a
 mergeBehaviors = mconcat . unBehaviors
 
@@ -84,6 +86,7 @@ instance (Semigroup a, Reflex t) => SwitchMerge t (Event t a) where
 instance (Semigroup a, Reflex t) => SwitchMerge t (Events t a) where
   switchMerge initial updates = events <$> switchMerge (mergeEvents <$> initial) (fmap (fmap mergeEvents) <$> updates)
 
+  
      
     
     

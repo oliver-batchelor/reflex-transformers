@@ -13,8 +13,8 @@ import Control.Monad
 import Control.Monad.Fix
 import Control.Monad.IO.Class
 
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 
 import Data.IORef
 

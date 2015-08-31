@@ -40,8 +40,8 @@ import Reflex.Host.App.Util
 
 import Reflex.Host.App.HostActions
 
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 
 
 

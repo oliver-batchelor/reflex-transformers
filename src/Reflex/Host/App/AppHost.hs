@@ -60,7 +60,7 @@ execAppHostFrame env app = snd <$> runAppHostFrame env app
 liftHostFrame :: ReflexHost t => HostFrame t a -> AppHost t r a
 liftHostFrame = AppHost . lift . lift
   
- 
+{-# INLINEABLE collectAppHost #-}
 collectAppHost :: (ReflexHost t, Monoid r) => AppHost t r a -> AppHost t s (a, r)
 collectAppHost m = do
     env <- AppHost ask
@@ -69,6 +69,7 @@ collectAppHost m = do
  
 instance (Monoid r, ReflexHost t) => MonadWriter r (AppHost t r) where
   
+  {-# INLINEABLE tell #-}
   tell r = AppHost $ modify' (r `mappend`) 
   listen m = do
     (a, r) <- collectAppHost m
