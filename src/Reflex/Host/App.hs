@@ -13,7 +13,9 @@ module Reflex.Host.App
 
   , collect
   , switchAppHost, holdAppHost
+  
   , listWithKey
+  , collection
   
   
   , HostActions
@@ -106,8 +108,6 @@ holdAppHost mInit mChanged = do
   holdDyn a (fst <$> updates)
   
   
-
-
         
 performList :: (MonadAppHost t r m, Ord k) => UpdatedMap t k (m a) -> m (UpdatedMap t k a)
 performList (UpdatedMap initial updates) = do
