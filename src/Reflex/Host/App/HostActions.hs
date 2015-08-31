@@ -85,7 +85,7 @@ makePostBuild pb = mempty { hostPostBuild = Ap pb }
 
 {-# INLINEABLE mergeHostActions #-}
 mergeHostActions :: (ReflexHost t) => Events t (ApHostAction t) -> Event t (HostAction t)
-mergeHostActions e = getApp <$> mergeEvents e
+mergeHostActions e = getAp <$> mergeEvents e
 
 
   

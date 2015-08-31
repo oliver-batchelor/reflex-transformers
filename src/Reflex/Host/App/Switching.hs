@@ -77,18 +77,15 @@ instance (Semigroup a, Reflex t) => Switching t (Event t a) where
     
     
 -- This will hopefully become a primitive (faster!)
-switchMergeEvents ::  (MonadFix m, MonadHold t m, Reflex t, Ord k) =>  MapChanges t k (Event t a) -> m (Event t (Map k a))
+switchMergeEvents ::  (MonadFix m, MonadHold t m, Reflex t, Ord k) =>  UpdatedMap t k (Event t a) -> m (Event t (Map k a))
 switchMergeEvents mapChanges = switch . fmap mergeMap . current <$> patchMap mapChanges 
 
 instance (Semigroup a, Reflex t) => SwitchMerge t (Event t a) where
-  switchMerge initial updates = fmap (foldl1 (<>)) <$> switchMergeEvents (initial, updates)
+  switchMerge initial updates = fmap (foldl1 (<>)) <$> switchMergeEvents (UpdatedMap initial updates)
   
 instance (Semigroup a, Reflex t) => SwitchMerge t (Events t a) where
   switchMerge initial updates = events <$> switchMerge (mergeEvents <$> initial) (fmap (fmap mergeEvents) <$> updates)
 
   
-     
-    
-    
-  
-  
+switchMerge' :: (Reflex t, SwitchMerge t r, MonadFix m, MonadHold t m, Ord k) => UpdatedMap t k r -> m r 
+switchMerge' (UpdatedMap initial changes) = switchMerge initial changes  

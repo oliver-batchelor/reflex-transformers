@@ -60,8 +60,9 @@ library
     , semigroups
     , containers
   default-extensions:
-    FlexibleInstances
     TupleSections
+    RecursiveDo
+    FlexibleInstances
     FlexibleContexts
     StandaloneDeriving
     FunctionalDependencies

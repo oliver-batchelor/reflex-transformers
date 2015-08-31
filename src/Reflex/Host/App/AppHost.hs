@@ -159,7 +159,7 @@ initHostApp app = do
     eventValue :: MonadReadEvent t m => EventHandle t a -> m (Maybe a)
     eventValue = readEvent >=> sequenceA
 
-  go =<< DL.toList <$> runHostFrame (getApp postBuild)
+  go =<< DL.toList <$> runHostFrame (getAp postBuild)
   return (env, go)
 
    

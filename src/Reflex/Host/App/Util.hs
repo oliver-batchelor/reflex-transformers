@@ -21,10 +21,23 @@ import Data.IORef
 import Prelude
  
 
-type MapChanges t k a = (Map k a, Event t (Map k (Maybe a)))   
+data UpdatedMap t k a = UpdatedMap (Map k a) (Event t (Map k (Maybe a)))   
 
-patchMap :: (Reflex t, MonadHold t m, MonadFix m, Ord k) => MapChanges t k a -> m (Dynamic t (Map k a))
-patchMap (initial, changes) = foldDyn (flip (ifoldr modify)) initial changes
+
+instance Reflex t => Functor (UpdatedMap t k) where
+  fmap f (UpdatedMap initial changes) = UpdatedMap (f <$> initial) (fmap (fmap f) <$> changes)
+  
+instance Reflex t => FunctorWithIndex k (UpdatedMap t k) where
+  imap f (UpdatedMap initial changes) = UpdatedMap (imap f initial) (imap (\i -> fmap (f i)) <$> changes)
+
+
+
+splitUpdated :: (Reflex t, Ord k) => UpdatedMap t k (a, b) -> (UpdatedMap t k a, UpdatedMap t k b)
+splitUpdated updatedMap = (fst <$> updatedMap, snd <$> updatedMap)
+
+
+patchMap :: (Reflex t, MonadHold t m, MonadFix m, Ord k) => UpdatedMap t k a -> m (Dynamic t (Map k a))
+patchMap (UpdatedMap initial changes) = foldDyn (flip (ifoldr modify)) initial changes
   
   where 
     modify k Nothing items = Map.delete k items

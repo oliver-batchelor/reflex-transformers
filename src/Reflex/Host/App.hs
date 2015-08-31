@@ -29,10 +29,12 @@ module Reflex.Host.App
 import Control.Applicative
 import Control.Concurrent
 import Control.Monad
+import Control.Monad.Fix
 import Control.Monad.Trans
 import Control.Lens
 
 import Data.Monoid
+import Data.List
 import Reflex.Class
 import Reflex.Dynamic
 import Reflex.Host.App.Class
@@ -103,28 +105,50 @@ holdAppHost mInit mChanged = do
   tell =<< switching r (snd <$> updates) 
   holdDyn a (fst <$> updates)
   
+  
 
 
         
-performList :: (MonadAppHost t r m, Ord k, Show k) => MapChanges t k (m a) -> m (MapChanges t k a)
-performList (initial, updates) = do
+performList :: (MonadAppHost t r m, Ord k) => UpdatedMap t k (m a) -> m (UpdatedMap t k a)
+performList (UpdatedMap initial updates) = do
   runAppHost <- askRunAppHost
   initialViews <- mapM collect initial
+  viewUpdates <- performEvent $ mapMOf (traverse . _Just) runAppHost <$> updates
   
-  updatedViews <- performEvent $ mapMOf (traverse . _Just) runAppHost <$> updates
+  let updatedViews = UpdatedMap initialViews viewUpdates
   
-  tell =<< switchMerge (snd <$> initialViews) (fmap (fmap snd) <$> updatedViews)
-  return (fst <$> initialViews, fmap (fmap fst) <$> updatedViews)
+  tell =<< switchMerge' (snd <$> updatedViews)
+  return (fst <$> updatedViews)
 
+   
+collection :: (MonadAppHost t r m) => [m (a, Event t ())] -> Event t [m (a, Event t ())] -> m (Dynamic t [a])
+collection initial added = do
+  rec
+    count <- current <$> (foldDyn (+) (genericLength initial) $ genericLength <$> added)
+    let updates = mergeWith (<>) 
+          [ fmap Just <$> attachWith zipFrom count added
+          , toRemove 
+          ]
   
+    updatedViews <- performList (UpdatedMap initialViews updates)
+    toRemove <- switchMerge' $ toRemovals $ snd <$> updatedViews
+  
+  mapDyn Map.elems =<< patchMap (fst <$> updatedViews)
 
-listWithKey :: (MonadAppHost t r m, Ord k, Show k) => Dynamic t (Map k v) -> (k -> Dynamic t v ->  m a) ->  m (Dynamic t (Map k a))
+  where
+    zipFrom n = Map.fromList . zip [n..] 
+    initialViews = zipFrom 0 initial
+    toRemovals = imap (\k -> fmap $ const $ Map.singleton k Nothing)
+    
+    
+
+listWithKey :: (MonadAppHost t r m, Ord k) => Dynamic t (Map k v) -> (k -> Dynamic t v ->  m a) ->  m (Dynamic t (Map k a))
 listWithKey input childView =  do
   inputViews <- mapDyn (Map.mapWithKey itemView) input
   let updates = diffKeys (current inputViews) (updated inputViews)  
 
   initial <- sample (current inputViews)
-  patchMap =<< performList (initial, updates)
+  patchMap =<< performList (UpdatedMap initial updates)
   
   where
     itemView k v = holdDyn v (fmapMaybe (Map.lookup k) (updated input)) >>= childView k  
