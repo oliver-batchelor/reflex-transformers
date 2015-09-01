@@ -26,6 +26,9 @@ module Reflex.Host.App
   , events, mergeEvents
   , behaviors, mergeBehaviors 
   
+  , Workflow (..)
+  , workflow
+  
   ) where
 
 import Control.Applicative
@@ -152,5 +155,15 @@ listWithKey input childView =  do
   
   where
     itemView k v = holdDyn v (fmapMaybe (Map.lookup k) (updated input)) >>= childView k  
+    
+    
+    
+newtype Workflow t m a = Workflow { unWorkflow :: m (a, Event t (Workflow t m a)) }
+
+workflow :: forall t m r a. MonadAppHost t r m => Workflow t m a -> m (Dynamic t a)
+workflow (Workflow w) = do
+  rec 
+    result <- holdAppHost w $ unWorkflow <$> switch (snd <$> current result)
+  mapDyn fst result        
     
  
