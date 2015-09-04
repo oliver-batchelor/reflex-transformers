@@ -29,6 +29,9 @@ module Reflex.Host.App
   , Workflow (..)
   , workflow
   
+  , Chain (..)
+  , runChain
+  
   ) where
 
 import Control.Applicative
@@ -157,7 +160,7 @@ listWithKey input childView =  do
     itemView k v = holdDyn v (fmapMaybe (Map.lookup k) (updated input)) >>= childView k  
     
     
-    
+-- 
 newtype Workflow t m a = Workflow { unWorkflow :: m (a, Event t (Workflow t m a)) }
 
 workflow :: forall t m r a. MonadAppHost t r m => Workflow t m a -> m (Dynamic t a)
@@ -167,3 +170,30 @@ workflow (Workflow w) = do
   mapDyn fst result        
     
  
+ 
+data Chain t m a b = Chain { unChain :: a -> m (Event t b) }
+
+
+(=>>=) :: a -> m (Event t b)
+
+-- instance Category 
+
+                        
+-- runChain :: forall t m r a. MonadAppHost t r m => a -> Chain t m a b -> m (Event t b)
+-- runChain m = do
+--   rec 
+--     result <- holdAppHost m $ switch (fmap continue <$> current result)
+--     
+--   (x::_) <- switchPromptly never $ fmapMaybe done <$> updated result
+--   undefined
+--   
+--     where
+--       continue (Done _) = return never
+--       continue (Next m) = m
+--       
+--       done (Done e) = Just e
+--       done _        = Nothing
+      
+      
+  
+  
