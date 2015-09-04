@@ -29,8 +29,7 @@ module Reflex.Host.App
   , Workflow (..)
   , workflow
   
-  , Chain (..)
-  , runChain
+  , (>->)
   
   ) where
 
@@ -143,7 +142,7 @@ collection initial added = do
 
   where
     zipFrom n = Map.fromList . zip [n..] 
-    initialViews = zipFrom 0 initial
+    initialViews = zipFrom (0::Integer) initial
     toRemovals = imap (\k -> fmap $ const $ Map.singleton k Nothing)
     
     
@@ -163,36 +162,22 @@ listWithKey input childView =  do
 -- 
 newtype Workflow t m a = Workflow { unWorkflow :: m (a, Event t (Workflow t m a)) }
 
-workflow :: forall t m r a. MonadAppHost t r m => Workflow t m a -> m (Dynamic t a)
+workflow :: MonadAppHost t r m => Workflow t m a -> m (Dynamic t a)
 workflow (Workflow w) = do
   rec 
     result <- holdAppHost w $ unWorkflow <$> switch (snd <$> current result)
   mapDyn fst result        
     
- 
- 
-data Chain t m a b = Chain { unChain :: a -> m (Event t b) }
+  
 
+(>->) :: MonadAppHost t r m => m (Event t b) -> (b -> m (Event t c)) -> m (Event t c)
+w >-> f = do
+  runAppHost <- askRunAppHost
+  (e, r) <- collect w
+  next <- performEvent $ runAppHost . f <$> e
+  tell =<< switching r (snd <$> next)   
+  switchPromptly never (fst <$> next)
 
-(=>>=) :: a -> m (Event t b)
-
--- instance Category 
-
-                        
--- runChain :: forall t m r a. MonadAppHost t r m => a -> Chain t m a b -> m (Event t b)
--- runChain m = do
---   rec 
---     result <- holdAppHost m $ switch (fmap continue <$> current result)
---     
---   (x::_) <- switchPromptly never $ fmapMaybe done <$> updated result
---   undefined
---   
---     where
---       continue (Done _) = return never
---       continue (Next m) = m
---       
---       done (Done e) = Just e
---       done _        = Nothing
       
       
   
