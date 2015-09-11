@@ -19,11 +19,11 @@ import Data.Foldable
 import Prelude
 
 
-class (Reflex t) => Switching t r | r -> t where
+class (Reflex t) => Switching t r  where
    -- | Generalization of switchable reactive types (e.g. Event, Behavior)
    switching :: MonadHold t m => r -> Event t r -> m r
    
-class (Switching t r, Monoid r) => SwitchMerge t r | r -> t where   
+class (Switching t r, Monoid r) => SwitchMerge t r  where   
    switchMerge :: (MonadFix m, MonadHold t m, Ord k) => Map k r -> Event t (Map k (Maybe r)) -> m r
 
 
@@ -36,8 +36,6 @@ instance (SwitchMerge t a, SwitchMerge t b) => SwitchMerge t (a, b) where
     a <- switchMerge (fst <$> initial) (fmap (fmap fst) <$> e)
     b <- switchMerge (snd <$> initial) (fmap (fmap snd) <$> e)
     return (a, b)
-
-    
 
     
 
@@ -80,6 +78,8 @@ instance (Monoid a, Reflex t) => SwitchMerge t (Behavior t a) where
 instance (Monoid a, Reflex t) => SwitchMerge t (Behaviors t a) where
   switchMerge initial updates = behaviors <$> switchMerge' (mergeBehaviors <$> UpdatedMap initial updates)  
   
+instance (Reflex t) => SwitchMerge t () where
+  switchMerge _ _ = pure ()  
 
 instance (Monoid a, Reflex t) => Switching t (Behaviors t a)  where
   switching bs updates = behaviors <$> switching (mergeBehaviors bs) (mergeBehaviors <$> updates)
@@ -94,7 +94,11 @@ instance (Monoid a, Reflex t) => Switching t (Behavior t a)  where
 instance (Semigroup a, Reflex t) => Switching t (Event t a) where
   switching e updates = switch <$> hold e updates
     
-    
+instance (Reflex t) => Switching t () where
+  switching _ _ = pure ()
   
 switchMerge' :: (Reflex t, SwitchMerge t r, MonadFix m, MonadHold t m, Ord k) => UpdatedMap t k r -> m r 
 switchMerge' (UpdatedMap initial changes) = switchMerge initial changes  
+
+
+

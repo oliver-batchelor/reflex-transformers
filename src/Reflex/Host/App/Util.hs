@@ -27,6 +27,8 @@ data UpdatedMap t k a = UpdatedMap (Map k a) (Event t (Map k (Maybe a)))
 instance Reflex t => Functor (UpdatedMap t k) where
   fmap f (UpdatedMap initial changes) = UpdatedMap (f <$> initial) (fmap (fmap f) <$> changes)
   
+  
+  
 instance Reflex t => FunctorWithIndex k (UpdatedMap t k) where
   imap f (UpdatedMap initial changes) = UpdatedMap (imap f initial) (imap (\i -> fmap (f i)) <$> changes)
 

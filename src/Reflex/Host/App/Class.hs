@@ -10,6 +10,8 @@ module Reflex.Host.App.Class
   , MonadIOHost (..)
   , IOHost
   
+  , MonadReflex
+  
   , module Reflex.Host.App.Switching
   
   
@@ -29,6 +31,7 @@ import Control.Monad.Writer.Class
 
 import Prelude
 
+type MonadReflex t m = (Reflex t, MonadHold t m, MonadFix m)
 type IOHost t m = (ReflexHost t, MonadReflexCreateTrigger t m, MonadIO m, MonadIO (HostFrame t))
 
   
@@ -40,6 +43,7 @@ class (MonadWriter r (m r), MonadWriter s (m s)) => MapWriter m s r  where
   mapWriter :: (s -> (r, b)) -> m s a -> m r (a, b) 
   
   
+
   
 instance MonadAppHost t r m => MonadAppHost t r (ReaderT e m) where
   
@@ -56,8 +60,7 @@ instance MonadAppHost t r m => MonadAppHost t r (ReaderT e m) where
 
 
   
-class (Reflex t, MonadFix m, MonadHold t m, MonadHold t (Host t m), MonadFix (Host t m),  
-       MonadWriter r m, SwitchMerge t r) => MonadAppHost t r m | m -> t r where
+class (MonadReflex t m, MonadReflex t (Host t m),  MonadWriter r m, SwitchMerge t r) => MonadAppHost t r m | m -> t r where
   type Host t m :: * -> *
     
   -- | Run a monadic host action during or immediately each frame in which the event fires, 

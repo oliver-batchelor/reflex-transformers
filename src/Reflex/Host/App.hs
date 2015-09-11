@@ -10,6 +10,7 @@ module Reflex.Host.App
   
   , MonadAppHost(..)
   , MonadIOHost (..)
+  , MonadReflex
 
   , collect
   , switchAppHost, holdAppHost
@@ -88,11 +89,20 @@ performEventAsync event = do
   
    
 
+collect' :: MapWriter m s r => m s a -> m r (a, s)   
+collect' = mapWriter (mempty,)
+
   
 collect :: MonadAppHost t r m => m a -> m (a, r)
 collect m = do
   runAppHost <- askRunAppHost
   liftHost (runAppHost m)  
+--   
+--   
+-- collect :: MonadAppHost t r m,  => m s a -> m r (a, r)
+-- collect m = do
+--   runAppHost <- askRunAppHost
+--   liftHost (runAppHost m)    
  
 
 switchAppHost :: MonadAppHost t r m => Event t (m a) -> m (Event t a)
