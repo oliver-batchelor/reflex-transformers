@@ -13,6 +13,8 @@ module Reflex.Host.App
   , MonadReflex
 
   , collect
+  , collect'
+  
   , switchAppHost, holdAppHost
   
   , listWithKey
@@ -86,8 +88,8 @@ performEventAsync event = do
   (result, fire) <- newExternalEvent
   performEvent_ $ liftIO <$> (void . forkIO . void . fire =<<) <$> event
   return result
-  
-   
+
+
 
 collect' :: MapWriter m s r => m s a -> m r (a, s)   
 collect' = mapWriter (mempty,)
@@ -183,7 +185,9 @@ workflow (Workflow w) = do
 (>->) :: MonadAppHost t r m => m (Event t b) -> (b -> m (Event t c)) -> m (Event t c)
 w >-> f = do
   runAppHost <- askRunAppHost
-  (e, r) <- collect w
+  (e, r) <- collect (w >>= onceE)
+  
+  
   next <- performEvent $ runAppHost . f <$> e
   tell =<< switching r (snd <$> next)   
   switchPromptly never (fst <$> next)
