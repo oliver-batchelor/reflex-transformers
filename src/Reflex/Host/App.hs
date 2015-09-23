@@ -12,7 +12,6 @@ module Reflex.Host.App
   , MonadIOHost (..)
   , MonadReflex
 
-  , collect
   , collect'
   
   , switchAppHost, holdAppHost
@@ -39,7 +38,6 @@ module Reflex.Host.App
 import Control.Applicative
 import Control.Concurrent
 import Control.Monad
-import Control.Monad.Fix
 import Control.Monad.Trans
 import Control.Lens
 
@@ -95,22 +93,13 @@ collect' :: MapWriter m s r => m s a -> m r (a, s)
 collect' = mapWriter (mempty,)
 
   
-collect :: MonadAppHost t r m => m a -> m (a, r)
-collect m = do
-  runAppHost <- askRunAppHost
-  liftHost (runAppHost m)  
---   
---   
--- collect :: MonadAppHost t r m,  => m s a -> m r (a, r)
--- collect m = do
---   runAppHost <- askRunAppHost
---   liftHost (runAppHost m)    
- 
+
+
 
 switchAppHost :: MonadAppHost t r m => Event t (m a) -> m (Event t a)
 switchAppHost mChanged = do 
-  runAppHost <- askRunAppHost
-  updates <- performEvent $ runAppHost <$> mChanged
+
+  updates <- performHost mChanged
   tell =<< switching mempty (snd <$> updates) 
   return (fst <$> updates)
 
@@ -118,9 +107,9 @@ switchAppHost mChanged = do
 -- action.
 holdAppHost :: MonadAppHost t r m => m a -> Event t (m a) -> m (Dynamic t a)
 holdAppHost mInit mChanged = do
-  runAppHost <- askRunAppHost
+
   (a, r) <- collect mInit
-  updates <- performEvent $ runAppHost <$> mChanged
+  updates <- performHost mChanged
   tell =<< switching r (snd <$> updates) 
   holdDyn a (fst <$> updates)
   
@@ -128,11 +117,11 @@ holdAppHost mInit mChanged = do
         
 performList :: (MonadAppHost t r m, Ord k) => UpdatedMap t k (m a) -> m (UpdatedMap t k a)
 performList (UpdatedMap initial updates) = do
-  runAppHost <- askRunAppHost
+
   initialViews <- mapM collect initial
-  viewUpdates <- performEvent $ mapMOf (traverse . _Just) runAppHost <$> updates
+  viewUpdates <- performHost $ traverse (traverse collect) <$> updates
   
-  let updatedViews = UpdatedMap initialViews viewUpdates
+  let updatedViews = UpdatedMap initialViews (fst <$> viewUpdates)
   
   tell =<< switchMerge' (snd <$> updatedViews)
   return (fst <$> updatedViews)
@@ -184,15 +173,9 @@ workflow (Workflow w) = do
 
 (>->) :: MonadAppHost t r m => m (Event t b) -> (b -> m (Event t c)) -> m (Event t c)
 w >-> f = do
-  runAppHost <- askRunAppHost
   (e, r) <- collect (w >>= onceE)
   
-  
-  next <- performEvent $ runAppHost . f <$> e
+  next <- performHost $ f <$> e
   tell =<< switching r (snd <$> next)   
   switchPromptly never (fst <$> next)
 
-      
-      
-  
-  

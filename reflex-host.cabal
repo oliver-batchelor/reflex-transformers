@@ -78,6 +78,7 @@ library
   exposed-modules:
     Reflex.Host.App
     Reflex.Host.App.Class
+    Reflex.Host.App.Supply
     Reflex.Host.App.AppHost
     Reflex.Host.App.PureHost
     Reflex.Host.App.HostActions

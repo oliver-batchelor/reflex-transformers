@@ -13,7 +13,7 @@ import Reflex.Host.App.Class
 import Prelude
 
 
-newtype M t a = M { unM :: forall m. (MonadHold t m, MonadFix m) => m a }
+newtype M t a = M { unM :: forall m. MonadReflex t m => m a }
 
  
 instance Functor (M t) where
@@ -65,26 +65,22 @@ instance (Reflex t, Monoid r) => MonadWriter r (PureHost t r) where
     return a  
   
  
-liftPureHost :: (Reflex t) => (forall n. (MonadHold t n, MonadFix n) => n a) -> PureHost t r a
+liftPureHost :: (Reflex t) => (forall m. (MonadReflex t m) => m a) -> PureHost t r a
 liftPureHost ma = PureHost $ lift (M ma)
 
 
-runPureHost :: (MonadHold t m, MonadFix m, Monoid r) => PureHost t r a -> m (a, r)
+runPureHost :: (MonadReflex t m, Monoid r) => PureHost t r a -> m (a, r)
 runPureHost app =  unM . flip runStateT mempty . unPureHost $ app
 
 
-execPureHost :: (MonadHold t m, MonadFix m, Monoid r) => PureHost t r a -> m r
+execPureHost :: (MonadReflex t m, Monoid r) => PureHost t r a -> m r
 execPureHost app = snd <$> runPureHost app
   
   
 instance (Reflex t, SwitchMerge t r, Monoid r) => MonadAppHost t r (PureHost t r) where
   
-  type Host t (PureHost t r) = M t
-  
-  performEvent e = return $ push (fmap Just . unM) e
-  liftHost (M m) = liftPureHost m
-  askRunAppHost = return $ \m -> M (runPureHost m)
-
+  performHost e = return $ pushAlways runPureHost e
+  collect m = liftPureHost (runPureHost m)
   
   
 instance (Reflex t, Monoid s, Monoid r) => MapWriter (PureHost t) s r  where  

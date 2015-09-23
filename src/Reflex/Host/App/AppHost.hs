@@ -94,25 +94,23 @@ instance (ReflexHost t, Monoid s, Monoid r) => MapWriter (AppHost t) s r  where
   
 instance (SwitchMerge t r, MonadIO (HostFrame t), Monoid r, ReflexHost t, HasHostActions t r) 
         => MonadAppHost t r (AppHost t r) where
-          
-  type Host t (AppHost t r) = HostFrame t
   
-  performEvent = performActions
-   
-  askRunAppHost = AppHost $ do
-    env <- ask
-    return (runAppHostFrame env)
-   
-  liftHost = liftHostFrame
+  performHost e = do 
+    env <- AppHost ask
+    performActions $ runAppHostFrame env <$> e
   
-    
+  collect  = collectAppHost 
 
+  
+  
 instance (ReflexHost t, HasHostActions t r, MonadIO (HostFrame t), MonadAppHost t r (AppHost t r)) 
          => MonadIOHost t r (AppHost t r) where
            
     askPostAsync = AppHost $ do
       chan <- ask
       return $ liftIO . writeChan chan    
+      
+    performEvent  = performActions  
       
     performEvent_ = performActions_
     
