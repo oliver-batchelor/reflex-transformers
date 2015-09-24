@@ -6,7 +6,7 @@ module Reflex.Host.App.Switching where
 
 import Reflex.Class hiding (constant)
 import Reflex.Dynamic
-import Reflex.Host.App.Util
+import Reflex.Host.App.UpdatedMap
 
 import Data.Map.Strict (Map)
 
@@ -61,7 +61,7 @@ mergeBehaviors = mconcat . unBehaviors
 
 -- This will hopefully become a primitive (faster!)
 switchMergeEvents ::  (MonadFix m, MonadHold t m, Reflex t, Ord k) =>  UpdatedMap t k (Event t a) -> m (Event t (Map k a))
-switchMergeEvents mapChanges = switch . fmap mergeMap . current <$> patchMap mapChanges 
+switchMergeEvents mapChanges = switch . fmap mergeMap . current <$> holdMap mapChanges 
 
 instance (Semigroup a, Reflex t) => SwitchMerge t (Event t a) where
   switchMerge initial updates = fmap (foldl1 (<>)) <$> switchMergeEvents (UpdatedMap initial updates)
@@ -71,7 +71,7 @@ instance (Semigroup a, Reflex t) => SwitchMerge t (Events t a) where
 
   
 instance (Monoid a, Reflex t) => SwitchMerge t (Behavior t a) where
-  switchMerge initial updates = pull <$> joinMap . current <$> patchMap (UpdatedMap initial updates)
+  switchMerge initial updates = pull <$> joinMap . current <$> holdMap (UpdatedMap initial updates)
     where joinMap m = sample =<< fold <$> sample m
   
   
@@ -98,7 +98,10 @@ instance (Reflex t) => Switching t () where
   switching _ _ = pure ()
   
 switchMerge' :: (Reflex t, SwitchMerge t r, MonadFix m, MonadHold t m, Ord k) => UpdatedMap t k r -> m r 
-switchMerge' (UpdatedMap initial changes) = switchMerge initial changes  
+switchMerge' (UpdatedMap initial e) = switchMerge initial e  
+
+switching' :: (Reflex t, Switching t r, MonadFix m, MonadHold t m) => Updated t r -> m r 
+switching' (Updated initial e) = switching initial e  
 
 
 

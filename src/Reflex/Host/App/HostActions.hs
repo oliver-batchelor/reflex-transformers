@@ -7,10 +7,11 @@ import Data.Dependent.Sum
 import Reflex.Class hiding (constant)
 import Reflex.Host.Class
 import Reflex.Host.App.Util
-import Reflex.Host.App.Switching
 import Reflex.Host.App.Class
 
+
 import Control.Monad
+import Control.Monad.Writer.Class
 import Control.Lens
 
 import Control.Monad.IO.Class

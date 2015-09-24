@@ -16,10 +16,11 @@ module Reflex.Host.App.Supply
 
 
 import Reflex
-import Reflex.Host.App.Class
+import Reflex.Host.App.Class hiding (split)
 
 import Control.Monad
 import Control.Monad.State.Strict
+import Control.Monad.Writer.Class
 import Control.Monad.Reader.Class
 
 
@@ -75,21 +76,35 @@ evalSupplyT :: Monad m => SupplyT s m a -> s -> m a
 evalSupplyT (SupplyT m) s = evalStateT m s
 
 
-  
-instance (MonadPerform t r m, Splitable s i) => MonadPerform t r (SupplyT s m) where
-  
-  perform e = do
-    s <- getSplit
-    rec
-      cur <- hold s (snd . fst <$> r)
-      r <- lift $ perform $ attachWith (flip runSupplyT) cur e
-    
-    return $ rearrange <$> r
-      where
-        rearrange ((a, _), r) = (a, r)
+{-  
+instance (MonadPerform t m, Splitable s i) => MonadPerform t (SupplyT s m) where
 
-  collect m = do 
-    s   <- SupplyT get
-    ((a, s'), r) <- lift $ collect (runSupplyT m s)
-    SupplyT (put s')
-    return (a, r)
+  performM (UpdatedMap initial updates) = do
+    
+    lift $ performM (runSupplyT initial s)-}
+
+
+--   holdM initial update = do    
+--     s <- getSplit
+--     r <- lift $ holdM (runSupplyT initial s) $
+--         attachWith (flip runSupplyT) (snd <$> current r) update
+-- 
+--     mapDyn fst r
+    
+  
+  
+--   perform e = do
+--     s <- getSplit
+--     rec
+--       cur <- hold s (snd . fst <$> r)
+--       r <- lift $ perform $ attachWith (flip runSupplyT) cur e
+--     
+--     return $ rearrange <$> r
+--       where
+--         rearrange ((a, _), r) = (a, r)
+-- 
+--   collect m = do 
+--     s   <- SupplyT get
+--     ((a, s'), r) <- lift $ collect (runSupplyT m s)
+--     SupplyT (put s')
+--     return (a, r)

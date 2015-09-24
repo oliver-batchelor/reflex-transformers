@@ -94,42 +94,24 @@ collect' = mapWriter (mempty,)
 
   
 
+holdM :: (MonadSwitch t m) => m a -> Event t (m a) -> m (Dynamic t a)
+holdM initial e = hold' =<< switchM (Updated initial e)
 
-
-switchM :: (MonadPerform t r m, Switching t r)
-  
- => Event t (m a) -> m (Event t a)
-switchM mChanged = do 
-
-  updates <- perform mChanged
-  tell =<< switching mempty (snd <$> updates) 
-  return (fst <$> updates)
-
--- | Like 'widgetSwitch', but taking the initial postBuild action from another host
--- action.
-holdM :: (MonadPerform t r m, Switching t r) => m a -> Event t (m a) -> m (Dynamic t a)
-holdM mInit mChanged = do
-
-  (a, r) <- collect mInit
-  updates <- perform mChanged
-  tell =<< switching r (snd <$> updates) 
-  holdDyn a (fst <$> updates)
-  
   
         
-performMap :: (MonadPerform t r m, SwitchMerge t r, Ord k) => UpdatedMap t k (m a) -> m (UpdatedMap t k a)
-performMap (UpdatedMap initial updates) = do
-
-  initialViews <- mapM collect initial
-  viewUpdates <- perform $ traverse (traverse collect) <$> updates
-  
-  let updatedViews = UpdatedMap initialViews (fst <$> viewUpdates)
-  
-  tell =<< switchMerge' (snd <$> updatedViews)
-  return (fst <$> updatedViews)
+-- performMap :: (MonadPerform t r m, SwitchMerge t r, Ord k) => UpdatedMap t k (m a) -> m (UpdatedMap t k a)
+-- performMap (UpdatedMap initial updates) = do
+-- 
+--   initialViews <- mapM collect initial
+--   viewUpdates <- perform $ traverse (traverse collect) <$> updates
+--   
+--   let updatedViews = UpdatedMap initialViews (fst <$> viewUpdates)
+--   
+--   tell =<< switchMerge' (snd <$> updatedViews)
+--   return (fst <$> updatedViews)
 
    
-collection :: (MonadPerform t r m, SwitchMerge t r) => [m (a, Event t ())] -> Event t [m (a, Event t ())] -> m (Dynamic t [a])
+collection :: (MonadSwitch t m) => [m (a, Event t ())] -> Event t [m (a, Event t ())] -> m (Dynamic t [a])
 collection initial added = do
   rec
     count <- current <$> (foldDyn (+) (genericLength initial) $ genericLength <$> added)
@@ -138,10 +120,10 @@ collection initial added = do
           , toRemove 
           ]
   
-    updatedViews <- performMap (UpdatedMap initialViews updates)
+    updatedViews <- switchMapM (UpdatedMap initialViews updates)
     toRemove <- switchMerge' $ toRemovals $ snd <$> updatedViews
   
-  mapDyn Map.elems =<< patchMap (fst <$> updatedViews)
+  mapDyn Map.elems =<< holdMap (fst <$> updatedViews)
 
   where
     zipFrom n = Map.fromList . zip [n..] 
@@ -150,13 +132,13 @@ collection initial added = do
     
     
 
-listWithKey :: (MonadPerform t r m, SwitchMerge t r, Ord k) => Dynamic t (Map k v) -> (k -> Dynamic t v ->  m a) ->  m (Dynamic t (Map k a))
+listWithKey :: (MonadSwitch t m, Ord k) => Dynamic t (Map k v) -> (k -> Dynamic t v ->  m a) ->  m (Dynamic t (Map k a))
 listWithKey input childView =  do
   inputViews <- mapDyn (Map.mapWithKey itemView) input
   let updates = diffKeys (current inputViews) (updated inputViews)  
 
   initial <- sample (current inputViews)
-  patchMap =<< performMap (UpdatedMap initial updates)
+  holdMap =<< switchMapM (UpdatedMap initial updates)
   
   where
     itemView k v = holdDyn v (fmapMaybe (Map.lookup k) (updated input)) >>= childView k  
@@ -165,7 +147,7 @@ listWithKey input childView =  do
 -- 
 newtype Workflow t m a = Workflow { unWorkflow :: m (a, Event t (Workflow t m a)) }
 
-workflow :: (MonadPerform t r m, Switching t r) => Workflow t m a -> m (Dynamic t a)
+workflow :: (MonadSwitch t m) => Workflow t m a -> m (Dynamic t a)
 workflow (Workflow w) = do
   rec 
     result <- holdM w $ unWorkflow <$> switch (snd <$> current result)
@@ -173,11 +155,13 @@ workflow (Workflow w) = do
     
   
 
-(>->) :: (MonadPerform t r m, Switching t r) => m (Event t b) -> (b -> m (Event t c)) -> m (Event t c)
+(>->) :: (MonadSwitch t m) => m (Event t b) -> (b -> m (Event t c)) -> m (Event t c)
 w >-> f = do
-  (e, r) <- collect (w >>= onceE)
+  undefined
   
-  next <- perform $ f <$> e
-  tell =<< switching r (snd <$> next)   
-  switchPromptly never (fst <$> next)
+--   (e, r) <- collect (w >>= onceE)
+--   
+--   next <- perform $ f <$> e
+--   tell =<< switching r (snd <$> next)   
+--   switchPromptly never (fst <$> next)
 

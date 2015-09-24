@@ -3,16 +3,20 @@
 {-# LANGUAGE ConstraintKinds #-}
 
 module Reflex.Host.App.Class
-  ( MonadWriter (..)
-  , MapWriter(..)
-  , censor
-  , MonadPerform (..)
+  ( MonadSwitch (..)
   , MonadIOHost (..)
   , IOHost
   
   , MonadReflex
   
-  , module Reflex.Host.App.Switching
+  , module Reflex
+  
+  , module Reflex.Host.App.Switching  
+  , module Reflex.Host.App.UpdatedMap
+  
+  , module Control.Monad.Writer.Class
+
+  , MapWriter (..)
   
   
   ) where
@@ -20,21 +24,44 @@ module Reflex.Host.App.Class
 
 import Data.Dependent.Sum
 
+import Reflex
 import Reflex.Class hiding (constant)
 import Reflex.Host.Class
 
+import Reflex.Host.App.UpdatedMap
 import Reflex.Host.App.Switching
+
+
 
 import Control.Monad
 import Control.Monad.Reader
+import Control.Monad.Writer
+
 import Control.Monad.Writer.Class
 
 import Prelude
 
-type MonadReflex t m = (Reflex t, MonadHold t m, MonadFix m)
-type IOHost t m = (ReflexHost t, MonadReflexCreateTrigger t m, MonadIO m, MonadIO (HostFrame t))
 
+-- Constraint type to capture common usage together
+type MonadReflex t m = (Reflex t, MonadHold t m, MonadFix m)    
+    
+class (MonadReflex t m) => MonadSwitch t m | m -> t where
   
+  -- | Map the result of an initial monadic widget and updates and swap 
+  -- it out with a new one, whenever the event provided fires.
+  -- returns an 'Updated' giving the initial value plus updates
+  -- 
+    switchM ::  Updated t (m a) -> m (Updated t a)
+    
+  -- | Like switchM but without an initial action
+    switchM' ::  Event t (m a) -> m (Event t a)
+    
+  -- | Similar to holdM but operating on a collection of widgets
+  -- provided as an 'UpdatedMap'.
+    switchMapM ::  UpdatedMap t k (m a) -> m (UpdatedMap t k a)
+    
+    
+    
 class (MonadWriter r (m r), MonadWriter s (m s)) => MapWriter m s r  where  
   
   -- | Embed one MonadAppWriter in another, a function is used to split the 
@@ -42,39 +69,49 @@ class (MonadWriter r (m r), MonadWriter s (m s)) => MapWriter m s r  where
   --   and a part to return.
   mapWriter :: (s -> (r, b)) -> m s a -> m r (a, b) 
   
+  
+  
+instance MonadSwitch t m => MonadSwitch t (ReaderT e m) where
 
-  
-instance MonadPerform t r m => MonadPerform t r (ReaderT e m) where
-  
-  perform e = do
+  switchM u = do
     env   <- ask
-    lift . perform $  (flip runReaderT env <$> e)
-
-  collect m = do 
-    env   <- ask
-    lift (collect (runReaderT m env))
-
-  
-class (MonadReflex t m,  MonadWriter r m) => MonadPerform t r m | m -> t r where
+    lift $ switchM (flip runReaderT env <$> u)
     
-  -- | Run a monadic action during or immediately each frame in which the event fires, 
-  -- and return the result in an event fired before other events.
-  -- (Either in the same frame, or in the next immediate frame.
-  perform :: Event t (m a) -> m (Event t (a, r))
+  switchM' e = do
+    env   <- ask
+    lift $ switchM' (flip runReaderT env <$> e)
+
   
+  switchMapM m = do
+    env   <- ask
+    lift . switchMapM $ flip runReaderT env <$> m
+
+    
+
+instance (MonadSwitch t m, SwitchMerge t w) => MonadSwitch t (WriterT w m) where
+
+  switchM u = do
+    (a, w) <- lift (split <$> switchM (runWriterT <$> u))
+    tell =<< switching' w
+    return a
+    
+    
+  switchM' e = do
+    (a, w) <- lift (split <$> switchM' (runWriterT <$> e))
+    tell =<< switching mempty w
+    return a
+
+  switchMapM m = do
+    undefined
   
-  -- | For the purposes of more efficient implementation.
-  -- can be simply implemented in terms of MonadWriter, but more useful
-  -- in this form.
-  collect :: m a -> m (a, r)
-  collect m = pass $ do
-    a <- listen m
-    return (a, const mempty)
-  
+    
+    
+type IOHost t m = (ReflexHost t, MonadReflexCreateTrigger t m, MonadIO m, MonadIO (HostFrame t))
+    
 
 
-class (ReflexHost t, MonadPerform t r m, MonadIO m, MonadIO (HostFrame t), 
-      MonadReflexCreateTrigger t m) => MonadIOHost t r m | m -> t r  where
+class (ReflexHost t, MonadSwitch t m, MonadIO m, MonadIO (HostFrame t), 
+      MonadReflexCreateTrigger t m) => MonadIOHost t m | m -> t  where
         
   -- | Return a function to post events via IO to a fifo Event queue.
   askPostAsync :: m (HostFrame t [DSum (EventTrigger t)] -> IO ())      

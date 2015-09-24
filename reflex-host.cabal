@@ -80,7 +80,7 @@ library
     Reflex.Host.App.Class
     Reflex.Host.App.Supply
     Reflex.Host.App.AppHost
-    Reflex.Host.App.PureHost
+    Reflex.Host.App.ReflexM
     Reflex.Host.App.HostActions
     Reflex.Host.App.Switching
     Reflex.Host.App.Util
