@@ -6,7 +6,7 @@ module Reflex.Host.App.Class
   ( MonadWriter (..)
   , MapWriter(..)
   , censor
-  , MonadAppHost (..)
+  , MonadPerform (..)
   , MonadIOHost (..)
   , IOHost
   
@@ -44,23 +44,23 @@ class (MonadWriter r (m r), MonadWriter s (m s)) => MapWriter m s r  where
   
 
   
-instance MonadAppHost t r m => MonadAppHost t r (ReaderT e m) where
+instance MonadPerform t r m => MonadPerform t r (ReaderT e m) where
   
-  performHost e = do
+  perform e = do
     env   <- ask
-    lift . performHost $  (flip runReaderT env <$> e)
+    lift . perform $  (flip runReaderT env <$> e)
 
   collect m = do 
     env   <- ask
     lift (collect (runReaderT m env))
 
   
-class (MonadReflex t m,  MonadWriter r m, SwitchMerge t r) => MonadAppHost t r m | m -> t r where
+class (MonadReflex t m,  MonadWriter r m) => MonadPerform t r m | m -> t r where
     
   -- | Run a monadic action during or immediately each frame in which the event fires, 
   -- and return the result in an event fired before other events.
   -- (Either in the same frame, or in the next immediate frame.
-  performHost :: Event t (m a) -> m (Event t (a, r))
+  perform :: Event t (m a) -> m (Event t (a, r))
   
   
   -- | For the purposes of more efficient implementation.
@@ -73,7 +73,7 @@ class (MonadReflex t m,  MonadWriter r m, SwitchMerge t r) => MonadAppHost t r m
   
 
 
-class (ReflexHost t, MonadAppHost t r m, MonadIO m, MonadIO (HostFrame t), 
+class (ReflexHost t, MonadPerform t r m, MonadIO m, MonadIO (HostFrame t), 
       MonadReflexCreateTrigger t m) => MonadIOHost t r m | m -> t r  where
         
   -- | Return a function to post events via IO to a fifo Event queue.

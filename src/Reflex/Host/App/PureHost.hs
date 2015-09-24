@@ -77,9 +77,9 @@ execPureHost :: (MonadReflex t m, Monoid r) => PureHost t r a -> m r
 execPureHost app = snd <$> runPureHost app
   
   
-instance (Reflex t, SwitchMerge t r, Monoid r) => MonadAppHost t r (PureHost t r) where
+instance (Reflex t, Monoid r) => MonadPerform t r (PureHost t r) where
   
-  performHost e = return $ pushAlways runPureHost e
+  perform e = return $ pushAlways runPureHost e
   collect m = liftPureHost (runPureHost m)
   
   

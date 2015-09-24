@@ -8,13 +8,13 @@ module Reflex.Host.App
   , MonadWriter (..), MapWriter (..)
   , censor
   
-  , MonadAppHost(..)
+  , MonadPerform (..)
   , MonadIOHost (..)
   , MonadReflex
 
   , collect'
   
-  , switchAppHost, holdAppHost
+  , switchM, holdM
   
   , listWithKey
   , collection
@@ -96,30 +96,32 @@ collect' = mapWriter (mempty,)
 
 
 
-switchAppHost :: MonadAppHost t r m => Event t (m a) -> m (Event t a)
-switchAppHost mChanged = do 
+switchM :: (MonadPerform t r m, Switching t r)
+  
+ => Event t (m a) -> m (Event t a)
+switchM mChanged = do 
 
-  updates <- performHost mChanged
+  updates <- perform mChanged
   tell =<< switching mempty (snd <$> updates) 
   return (fst <$> updates)
 
 -- | Like 'widgetSwitch', but taking the initial postBuild action from another host
 -- action.
-holdAppHost :: MonadAppHost t r m => m a -> Event t (m a) -> m (Dynamic t a)
-holdAppHost mInit mChanged = do
+holdM :: (MonadPerform t r m, Switching t r) => m a -> Event t (m a) -> m (Dynamic t a)
+holdM mInit mChanged = do
 
   (a, r) <- collect mInit
-  updates <- performHost mChanged
+  updates <- perform mChanged
   tell =<< switching r (snd <$> updates) 
   holdDyn a (fst <$> updates)
   
   
         
-performList :: (MonadAppHost t r m, Ord k) => UpdatedMap t k (m a) -> m (UpdatedMap t k a)
-performList (UpdatedMap initial updates) = do
+performMap :: (MonadPerform t r m, SwitchMerge t r, Ord k) => UpdatedMap t k (m a) -> m (UpdatedMap t k a)
+performMap (UpdatedMap initial updates) = do
 
   initialViews <- mapM collect initial
-  viewUpdates <- performHost $ traverse (traverse collect) <$> updates
+  viewUpdates <- perform $ traverse (traverse collect) <$> updates
   
   let updatedViews = UpdatedMap initialViews (fst <$> viewUpdates)
   
@@ -127,7 +129,7 @@ performList (UpdatedMap initial updates) = do
   return (fst <$> updatedViews)
 
    
-collection :: (MonadAppHost t r m) => [m (a, Event t ())] -> Event t [m (a, Event t ())] -> m (Dynamic t [a])
+collection :: (MonadPerform t r m, SwitchMerge t r) => [m (a, Event t ())] -> Event t [m (a, Event t ())] -> m (Dynamic t [a])
 collection initial added = do
   rec
     count <- current <$> (foldDyn (+) (genericLength initial) $ genericLength <$> added)
@@ -136,7 +138,7 @@ collection initial added = do
           , toRemove 
           ]
   
-    updatedViews <- performList (UpdatedMap initialViews updates)
+    updatedViews <- performMap (UpdatedMap initialViews updates)
     toRemove <- switchMerge' $ toRemovals $ snd <$> updatedViews
   
   mapDyn Map.elems =<< patchMap (fst <$> updatedViews)
@@ -148,13 +150,13 @@ collection initial added = do
     
     
 
-listWithKey :: (MonadAppHost t r m, Ord k) => Dynamic t (Map k v) -> (k -> Dynamic t v ->  m a) ->  m (Dynamic t (Map k a))
+listWithKey :: (MonadPerform t r m, SwitchMerge t r, Ord k) => Dynamic t (Map k v) -> (k -> Dynamic t v ->  m a) ->  m (Dynamic t (Map k a))
 listWithKey input childView =  do
   inputViews <- mapDyn (Map.mapWithKey itemView) input
   let updates = diffKeys (current inputViews) (updated inputViews)  
 
   initial <- sample (current inputViews)
-  patchMap =<< performList (UpdatedMap initial updates)
+  patchMap =<< performMap (UpdatedMap initial updates)
   
   where
     itemView k v = holdDyn v (fmapMaybe (Map.lookup k) (updated input)) >>= childView k  
@@ -163,19 +165,19 @@ listWithKey input childView =  do
 -- 
 newtype Workflow t m a = Workflow { unWorkflow :: m (a, Event t (Workflow t m a)) }
 
-workflow :: MonadAppHost t r m => Workflow t m a -> m (Dynamic t a)
+workflow :: (MonadPerform t r m, Switching t r) => Workflow t m a -> m (Dynamic t a)
 workflow (Workflow w) = do
   rec 
-    result <- holdAppHost w $ unWorkflow <$> switch (snd <$> current result)
+    result <- holdM w $ unWorkflow <$> switch (snd <$> current result)
   mapDyn fst result        
     
   
 
-(>->) :: MonadAppHost t r m => m (Event t b) -> (b -> m (Event t c)) -> m (Event t c)
+(>->) :: (MonadPerform t r m, Switching t r) => m (Event t b) -> (b -> m (Event t c)) -> m (Event t c)
 w >-> f = do
   (e, r) <- collect (w >>= onceE)
   
-  next <- performHost $ f <$> e
+  next <- perform $ f <$> e
   tell =<< switching r (snd <$> next)   
   switchPromptly never (fst <$> next)
 

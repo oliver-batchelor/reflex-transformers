@@ -76,13 +76,13 @@ evalSupplyT (SupplyT m) s = evalStateT m s
 
 
   
-instance (MonadAppHost t r m, Splitable s i) => MonadAppHost t r (SupplyT s m) where
+instance (MonadPerform t r m, Splitable s i) => MonadPerform t r (SupplyT s m) where
   
-  performHost e = do
+  perform e = do
     s <- getSplit
     rec
       cur <- hold s (snd . fst <$> r)
-      r <- lift $ performHost $ attachWith (flip runSupplyT) cur e
+      r <- lift $ perform $ attachWith (flip runSupplyT) cur e
     
     return $ rearrange <$> r
       where

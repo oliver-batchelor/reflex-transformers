@@ -44,8 +44,8 @@ instance ReflexHost t => Monoid (HostActions t) where
 instance ReflexHost t => Semigroup (HostActions t)
 
 instance ReflexHost t => Switching t (HostActions t) where
-    switching (HostActions perform postBuild) updated = do
-      updatedPerform <- switching perform (hostPerform <$> updated)
+    switching (HostActions toPerform postBuild) updated = do
+      updatedPerform <- switching toPerform (hostPerform <$> updated)
       return (HostActions (updatedPostBuild <> updatedPerform) postBuild)
       
       where
@@ -56,11 +56,11 @@ instance ReflexHost t => Switching t (HostActions t) where
 instance (ReflexHost t) => SwitchMerge t (HostActions t) where
   switchMerge initial updates = do 
 
-    updatedPerform <- switchMerge perform updates'
+    updatedPerform <- switchMerge toPerform updates'
     return (HostActions (updatedPostBuild <> updatedPerform) postBuild)
   
     where
-      perform = hostPerform <$> initial
+      toPerform = hostPerform <$> initial
       updates' = fmap (fmap hostPerform) <$> updates
     
       postBuild = fold $ hostPostBuild <$> initial

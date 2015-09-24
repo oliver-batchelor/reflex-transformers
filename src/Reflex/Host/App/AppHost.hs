@@ -92,10 +92,10 @@ instance (ReflexHost t, Monoid s, Monoid r) => MapWriter (AppHost t) s r  where
 
 
   
-instance (SwitchMerge t r, MonadIO (HostFrame t), Monoid r, ReflexHost t, HasHostActions t r) 
-        => MonadAppHost t r (AppHost t r) where
+instance (MonadIO (HostFrame t), Monoid r, ReflexHost t, HasHostActions t r) 
+        => MonadPerform t r (AppHost t r) where
   
-  performHost e = do 
+  perform e = do 
     env <- AppHost ask
     performActions $ runAppHostFrame env <$> e
   
@@ -103,7 +103,7 @@ instance (SwitchMerge t r, MonadIO (HostFrame t), Monoid r, ReflexHost t, HasHos
 
   
   
-instance (ReflexHost t, HasHostActions t r, MonadIO (HostFrame t), MonadAppHost t r (AppHost t r)) 
+instance (ReflexHost t, HasHostActions t r, MonadIO (HostFrame t), MonadPerform t r (AppHost t r)) 
          => MonadIOHost t r (AppHost t r) where
            
     askPostAsync = AppHost $ do
@@ -144,8 +144,8 @@ initHostApp :: (ReflexHost t, MonadIO m, MonadReflexHost t m)
 initHostApp app = do
   env <- liftIO newChan 
   
-  (HostActions perform postBuild) <- runHostFrame $ execAppHostFrame env app
-  nextActionEvent <- subscribeEvent (mergeHostActions perform)
+  (HostActions toPerform postBuild) <- runHostFrame $ execAppHostFrame env app
+  nextActionEvent <- subscribeEvent (mergeHostActions toPerform)
 
   let
     go [] = return ()
