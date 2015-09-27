@@ -16,7 +16,7 @@ module Reflex.Monad.Class
   
   
   ) where
-
+  
 
 import Reflex
 import Reflex.Updated

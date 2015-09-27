@@ -17,6 +17,8 @@ module Reflex.Monad
   , Workflow (..)
   , workflow
   
+  , Chain (..)
+  , runChain
   , (>->)
   
   ) where
@@ -24,6 +26,7 @@ module Reflex.Monad
 import Control.Applicative
 import Control.Monad
 import Control.Lens
+import Control.Category
 
 import Data.Monoid
 import Data.List
@@ -34,7 +37,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
 
-import Prelude -- Silence AMP warnings
+import Prelude hiding ((.)) -- Silence AMP warnings
 
   
 
@@ -86,14 +89,26 @@ workflow (Workflow w) = do
   mapDyn fst result        
     
   
-
-(>->) :: (MonadSwitch t m) => m (Event t b) -> (b -> m (Event t c)) -> m (Event t c)
-w >-> f = do
-  undefined
+data Chain t m a b where
+    Chain :: (a -> m (Event t b)) -> Chain t m a b
+    (:>>) ::  (a -> m (Event t b)) -> Chain t m b c ->  Chain t m a c
   
---   (e, r) <- collect (w >>= onceE)
---   
---   next <- perform $ f <$> e
---   tell =<< switching r (snd <$> next)   
---   switchPromptly never (fst <$> next)
+
+infixr 9 >->
+infixr 8 :>>
+
+  
+(>->) :: Chain t m a b -> Chain t m b c -> Chain t m a c  
+Chain f    >-> c  =  f :>> c 
+(f :>> c') >-> c  =  f :>> (c' >-> c) 
+
+
+toWorkflow :: (MonadSwitch t m) => Chain t m a b -> a -> Workflow t m (Event t b)
+toWorkflow (Chain f) a = Workflow $ (,never) <$> f a
+toWorkflow (f :>> c) a = Workflow $ do
+  e <- f a
+  return (never, toWorkflow c <$> e)
+  
+runChain :: (MonadSwitch t m) => Chain t m a b -> a -> m (Event t b)
+runChain c a = switchPromptlyDyn <$> workflow (toWorkflow c a)
 
