@@ -76,14 +76,19 @@ library
 
     
   exposed-modules:
-    Reflex.Host.App
-    Reflex.Host.App.Class
-    Reflex.Host.App.Supply
-    Reflex.Host.App.AppHost
-    Reflex.Host.App.ReflexM
-    Reflex.Host.App.HostActions
-    Reflex.Host.App.Switching
-    Reflex.Host.App.Util
+    Reflex.Monad
+    Reflex.Monad.Class
+    Reflex.Monad.ReflexM
+    Reflex.Monad.Supply
+
+    Reflex.Switching
+    Reflex.Updated
+
+    Reflex.Monad.App
+
+    Reflex.Monad.IO
+    Reflex.Monad.IO.HostActions
+  
 
   ghc-options: -Wall -O2 -threaded
 

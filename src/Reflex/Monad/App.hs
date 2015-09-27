@@ -1,167 +1,166 @@
-
--- | Module supporting the implementation of frameworks. You should import this if you
--- want to build your own framework.
-module Reflex.Host.App 
-  ( newExternalEvent, performEventAsync
-
-  , Switching (..), SwitchMerge (..)
-  , MonadWriter (..), MapWriter (..)
-  , censor
-  
-  , MonadPerform (..)
-  , MonadIOHost (..)
-  , MonadReflex
-
-  , collect'
-  
-  , switchM, holdM
-  
-  , listWithKey
-  , collection
-  
-  
-  , HostActions
-  , Events, Behaviors
-  
-  , postQuit
-  
-  , events, mergeEvents
-  , behaviors, mergeBehaviors 
-  
-  , Workflow (..)
-  , workflow
-  
-  , (>->)
-  
-  ) where
-
-import Control.Applicative
-import Control.Concurrent
-import Control.Monad
-import Control.Monad.Trans
-import Control.Lens
-
-import Data.Monoid
-import Data.List
-import Reflex.Class
-import Reflex.Dynamic
-import Reflex.Host.App.Class
-import Reflex.Host.App.Util
-
-import Reflex.Host.App.HostActions
-
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ImpredicativeTypes #-}  -- For deriving MonadReflexCreateTrigger
 
 
-
-import Prelude -- Silence AMP warnings
-
-  
-  
--- | Create a new event from an external event source. The returned function can be used
--- to fire the event.
-newExternalEvent :: (MonadIOHost t r m) => m (Event t a, a -> IO ())
-newExternalEvent = do
-  fire <- askPostAsync
-  (event, construct) <- newEventWithConstructor
-  return (event,  liftIO . fire . liftIO . construct)
-
-
-
-
-
-postQuit :: (MonadIOHost t r m) => m ()
-postQuit = do
-  fire <- askPostAsync
-  liftIO $ fire (return [])
-
-
-  
--- | Run some IO asynchronously in another thread starting after the frame in which the
--- input event fires and fire an event with the result of the IO action after it
--- completed.
-performEventAsync :: (MonadIOHost t r m) => Event t (IO a) -> m (Event t a)
-performEventAsync event = do
-  (result, fire) <- newExternalEvent
-  performEvent_ $ liftIO <$> (void . forkIO . void . fire =<<) <$> event
-  return result
-
-
-
-collect' :: MapWriter m s r => m s a -> m r (a, s)   
-collect' = mapWriter (mempty,)
-
-  
-
-holdM :: (MonadSwitch t m) => m a -> Event t (m a) -> m (Dynamic t a)
-holdM initial e = hold' =<< switchM (Updated initial e)
-
-  
-        
--- performMap :: (MonadPerform t r m, SwitchMerge t r, Ord k) => UpdatedMap t k (m a) -> m (UpdatedMap t k a)
--- performMap (UpdatedMap initial updates) = do
+module Reflex.Monad.App where
+--   ( AppHost
+--   , hostApp
+--   , initHostApp
+--   
+--   , module  Reflex.Host.App.HostActions
+--   
+--   ) where
 -- 
---   initialViews <- mapM collect initial
---   viewUpdates <- perform $ traverse (traverse collect) <$> updates
---   
---   let updatedViews = UpdatedMap initialViews (fst <$> viewUpdates)
---   
---   tell =<< switchMerge' (snd <$> updatedViews)
---   return (fst <$> updatedViews)
-
-   
-collection :: (MonadSwitch t m) => [m (a, Event t ())] -> Event t [m (a, Event t ())] -> m (Dynamic t [a])
-collection initial added = do
-  rec
-    count <- current <$> (foldDyn (+) (genericLength initial) $ genericLength <$> added)
-    let updates = mergeWith (<>) 
-          [ fmap Just <$> attachWith zipFrom count added
-          , toRemove 
-          ]
-  
-    updatedViews <- switchMapM (UpdatedMap initialViews updates)
-    toRemove <- switchMerge' $ toRemovals $ snd <$> updatedViews
-  
-  mapDyn Map.elems =<< holdMap (fst <$> updatedViews)
-
-  where
-    zipFrom n = Map.fromList . zip [n..] 
-    initialViews = zipFrom (0::Integer) initial
-    toRemovals = imap (\k -> fmap $ const $ Map.singleton k Nothing)
-    
-    
-
-listWithKey :: (MonadSwitch t m, Ord k) => Dynamic t (Map k v) -> (k -> Dynamic t v ->  m a) ->  m (Dynamic t (Map k a))
-listWithKey input childView =  do
-  inputViews <- mapDyn (Map.mapWithKey itemView) input
-  let updates = diffKeys (current inputViews) (updated inputViews)  
-
-  initial <- sample (current inputViews)
-  holdMap =<< switchMapM (UpdatedMap initial updates)
-  
-  where
-    itemView k v = holdDyn v (fmapMaybe (Map.lookup k) (updated input)) >>= childView k  
-    
-    
+-- import Control.Applicative
+-- import Control.Concurrent
+-- import Control.Monad.Reader
+-- import Control.Monad.State.Strict
+-- import Data.Dependent.Sum
+-- import Data.Bifunctor
 -- 
-newtype Workflow t m a = Workflow { unWorkflow :: m (a, Event t (Workflow t m a)) }
-
-workflow :: (MonadSwitch t m) => Workflow t m a -> m (Dynamic t a)
-workflow (Workflow w) = do
-  rec 
-    result <- holdM w $ unWorkflow <$> switch (snd <$> current result)
-  mapDyn fst result        
-    
-  
-
-(>->) :: (MonadSwitch t m) => m (Event t b) -> (b -> m (Event t c)) -> m (Event t c)
-w >-> f = do
-  undefined
-  
---   (e, r) <- collect (w >>= onceE)
+-- import qualified  Data.DList  as DL
+-- import Data.Semigroup.Applicative
+-- 
+-- import Reflex.Class hiding (constant)
+-- import Reflex.Host.Class
+-- import Reflex.Host.App.Class
+-- import Reflex.Host.App.HostActions
+-- 
+-- import Prelude
+-- 
+-- 
+-- type AppInputs t = HostFrame t [DSum (EventTrigger t)]
+-- 
+-- newtype AppHost t r a = AppHost
+--   { unAppHost :: ReaderT (Chan (AppInputs t)) (StateT r (HostFrame t))  a
+--   }
+-- 
+--    
+-- deriving instance ReflexHost t => Functor (AppHost t r)
+-- deriving instance ReflexHost t => Applicative (AppHost t r)
+-- deriving instance ReflexHost t => Monad (AppHost t r)
+-- deriving instance ReflexHost t => MonadHold t (AppHost t r)
+-- deriving instance ReflexHost t => MonadSample t (AppHost t r)
+-- deriving instance ReflexHost t => MonadReflexCreateTrigger t (AppHost t r)
+-- deriving instance (MonadIO (HostFrame t), ReflexHost t) => MonadIO (AppHost t r)
+-- deriving instance ReflexHost t => MonadFix (AppHost t r)
+-- 
+-- 
+-- 
+-- {-# INLINEABLE runAppHostFrame #-}
+-- runAppHostFrame :: (ReflexHost t, Monoid r) => Chan (AppInputs t) -> AppHost t r a -> HostFrame t (a, r)
+-- runAppHostFrame env app = flip runStateT mempty . flip runReaderT env . unAppHost $ app
+-- 
+-- {-# INLINEABLE execAppHostFrame #-}
+-- execAppHostFrame :: (ReflexHost t, Monoid r) => Chan (AppInputs t) -> AppHost t r a -> HostFrame t r
+-- execAppHostFrame env app = snd <$> runAppHostFrame env app
+-- 
+-- {-# INLINEABLE liftHostFrame #-}
+-- liftHostFrame :: ReflexHost t => HostFrame t a -> AppHost t r a
+-- liftHostFrame = AppHost . lift . lift
 --   
---   next <- perform $ f <$> e
---   tell =<< switching r (snd <$> next)   
---   switchPromptly never (fst <$> next)
+-- {-# INLINEABLE collectAppHost #-}
+-- collectAppHost :: (ReflexHost t, Monoid r) => AppHost t r a -> AppHost t s (a, r)
+-- collectAppHost m = do
+--     env <- AppHost ask
+--     liftHostFrame $ runAppHostFrame env m
+--  
+--  
+-- instance (Monoid r, ReflexHost t) => MonadWriter r (AppHost t r) where
+--   
+--   {-# INLINEABLE tell #-}
+--   tell r = AppHost $ modify' (r `mappend`) 
+--   listen m = do
+--     (a, r) <- collectAppHost m
+--     tell r
+--     return (a, r)
+--   
+--   pass m = do
+--     ((a, f), r) <- collectAppHost m
+--     tell (f r)
+--     return a
+--   
+--  
+--  
+-- instance (ReflexHost t, Monoid s, Monoid r) => MapWriter (AppHost t) s r  where  
+--   mapWriter f m = do
+--     (a, (r, b)) <- second f <$> collectAppHost m
+--     tell r
+--     return (a, b)    
+--     
+-- 
+-- 
+--   
+-- instance (MonadIO (HostFrame t), Monoid r, ReflexHost t, HasHostActions t r) 
+--         => MonadSwitch t (AppHost t r) where
+--   
+--   perform e = do 
+--     env <- AppHost ask
+--     performActions $ runAppHostFrame env <$> e
+--   
+--   collect  = collectAppHost 
+-- 
+--   
+--   
+-- instance (ReflexHost t, HasHostActions t r, MonadIO (HostFrame t), MonadPerform t r (AppHost t r)) 
+--          => MonadIOHost t r (AppHost t r) where
+--            
+--     askPostAsync = AppHost $ do
+--       chan <- ask
+--       return $ liftIO . writeChan chan    
+--       
+--     performEvent  = performActions  
+--       
+--     performEvent_ = performActions_
+--     
+--     schedulePostBuild_ = scheduleActions_
+--     
+--     schedulePostBuild = scheduleActions
+--   
+--   
+-- -- | Run an application. The argument is an action in the application host monad,
+-- -- where events can be set up (for example by using 'newExteneralEvent').
+-- --
+-- -- This function will block until the application exits (when one of the 'eventsToQuit'
+-- -- fires).
+--   
+-- hostApp :: (ReflexHost t, MonadIO m, MonadReflexHost t m) => AppHost t (HostActions t) () -> m ()
+-- hostApp app = loop =<< initHostApp app 
+--   
+--   
+--   where
+--     loop (chan, step) = do
+--       x <- liftIO (readChan chan) >>= runHostFrame
+--       unless (null x) $ step x >> loop (chan, step)
+--      
+-- 
+-- -- | Initialize the application using a 'AppHost' monad. This function enables use
+-- -- of use an external control loop. It returns a step function to step the application
+-- -- based on external inputs received through the channel.
+-- -- The step function returns False when one of the 'eventsToQuit' is fired.
+-- initHostApp :: (ReflexHost t, MonadIO m, MonadReflexHost t m)
+--             => AppHost t (HostActions t) () -> m (Chan (AppInputs t), [DSum (EventTrigger t)] -> m ())
+-- initHostApp app = do
+--   env <- liftIO newChan 
+--   
+--   (HostActions toPerform postBuild) <- runHostFrame $ execAppHostFrame env app
+--   nextActionEvent <- subscribeEvent (mergeHostActions toPerform)
+-- 
+--   let
+--     go [] = return ()
+--     go triggers = do
+--       maybeAction <- fireEventsAndRead triggers $ eventValue nextActionEvent 
+--       forM_ maybeAction $ \nextAction -> do
+--         go =<< DL.toList <$> runHostFrame nextAction
+--         
+--     eventValue :: MonadReadEvent t m => EventHandle t a -> m (Maybe a)
+--     eventValue = readEvent >=> sequenceA
+-- 
+--   go =<< DL.toList <$> runHostFrame (getAp postBuild)
+--   return (env, go)
+-- 
+--    
+--   
+
 

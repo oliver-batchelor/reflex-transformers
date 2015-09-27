@@ -1,17 +1,15 @@
 {-# LANGUAGE ConstraintKinds #-}
 
-module Reflex.Host.App.HostActions where
+module Reflex.Monad.IO.HostActions where
 
 import Data.Dependent.Sum
 
 import Reflex.Class hiding (constant)
 import Reflex.Host.Class
-import Reflex.Host.App.Util
-import Reflex.Host.App.Class
+import Reflex.Monad.IO
 
 
 import Control.Monad
-import Control.Monad.Writer.Class
 import Control.Lens
 
 import Control.Monad.IO.Class
@@ -45,12 +43,12 @@ instance ReflexHost t => Monoid (HostActions t) where
 instance ReflexHost t => Semigroup (HostActions t)
 
 instance ReflexHost t => Switching t (HostActions t) where
-    switching (HostActions toPerform postBuild) updated = do
-      updatedPerform <- switching toPerform (hostPerform <$> updated)
+    switching (HostActions toPerform postBuild) updates = do
+      updatedPerform <- switching toPerform (hostPerform <$> updates)
       return (HostActions (updatedPostBuild <> updatedPerform) postBuild)
       
       where
-        updatedPostBuild = events (hostPostBuild <$> updated)
+        updatedPostBuild = events (hostPostBuild <$> updates)
       
 
   
@@ -104,7 +102,7 @@ tellActions a = tell (mempty & actions .~ a)
 performActions_ :: (ReflexHost t, MonadWriter r m, HasHostActions t r) =>  Event t (HostFrame t ()) -> m ()
 performActions_  = tellActions . makePerform_
 
-scheduleActions :: (IOHost t m, MonadWriter r m, HasHostActions t r) => HostFrame t a -> m (Event t a)
+scheduleActions :: (MonadReflexIO t m, MonadWriter r m, HasHostActions t r) => HostFrame t a -> m (Event t a)
 scheduleActions a = do 
   (event, construct) <- newEventWithConstructor
   tellActions . makePostBuild $ liftIO . construct =<< a
@@ -114,7 +112,7 @@ scheduleActions_ :: (ReflexHost t, MonadWriter r m, HasHostActions t r) => HostF
 scheduleActions_ action = tellActions . makePostBuild $ action >> pure mempty
   
   
-performActions :: (IOHost t m,  MonadWriter r m, HasHostActions t r) =>  Event t (HostFrame t a) -> m (Event t a)
+performActions :: (MonadReflexIO t m,  MonadWriter r m, HasHostActions t r) =>  Event t (HostFrame t a) -> m (Event t a)
 performActions e = do 
   (event, construct) <- newEventWithConstructor
   tellActions . makePerform $ (liftIO . construct =<<) <$> e
