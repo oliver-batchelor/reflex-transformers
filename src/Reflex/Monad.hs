@@ -21,6 +21,8 @@ module Reflex.Monad
   , runChain
   , (>->)
   
+  , runLoop
+  
   ) where
 
 import Control.Applicative
@@ -102,13 +104,25 @@ infixr 8 :>>
 Chain f    >-> c  =  f :>> c 
 (f :>> c') >-> c  =  f :>> (c' >-> c) 
 
-
 toWorkflow :: (MonadSwitch t m) => Chain t m a b -> a -> Workflow t m (Event t b)
-toWorkflow (Chain f) a = Workflow $ (,never) <$> f a
+toWorkflow (Chain f) a = Workflow $ do 
+  e <- f a 
+  return (e, end <$ e)
+    where end = Workflow $ return (never, never)
+    
 toWorkflow (f :>> c) a = Workflow $ do
   e <- f a
   return (never, toWorkflow c <$> e)
   
 runChain :: (MonadSwitch t m) => Chain t m a b -> a -> m (Event t b)
 runChain c a = switchPromptlyDyn <$> workflow (toWorkflow c a)
+
+
+runLoop :: (MonadSwitch t m) => (a -> m (Event t a)) -> a -> m (Event t a)
+runLoop f a = do
+  rec
+    e <- switchPromptlyDyn <$> holdM (f a) (f <$> e)
+    
+  return e
+
 
