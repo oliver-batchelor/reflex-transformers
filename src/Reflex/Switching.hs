@@ -36,37 +36,17 @@ instance (SwitchMerge t a, SwitchMerge t b) => SwitchMerge t (a, b) where
     b <- switchMerge (snd <$> initial) (fmap (fmap snd) <$> e)
     return (a, b)
 
-    
-
-newtype Behaviors t a = Behaviors { unBehaviors :: [Behavior t a] } deriving (Monoid, Semigroup)
-newtype Events t a = Events { unEvents :: [Event t a] } deriving (Monoid, Semigroup)
-
-{-# INLINE events #-}
-events :: Event t a -> Events t a
-events = Events . pure
-
-{-# INLINE mergeEvents #-}
-mergeEvents :: (Reflex t, Semigroup a) => Events t a -> Event t a
-mergeEvents = mergeWith (<>) . unEvents
-
-{-# INLINE behaviors #-}
-behaviors :: Behavior t a -> Behaviors t a
-behaviors = Behaviors . pure
-
-{-# INLINE mergeBehaviors #-}
-mergeBehaviors :: (Reflex t, Monoid a) => Behaviors t a -> Behavior t a
-mergeBehaviors = mconcat . unBehaviors
-
 
 -- This will hopefully become a primitive (faster!)
 switchMergeEvents ::  (MonadFix m, MonadHold t m, Reflex t, Ord k) =>  UpdatedMap t k (Event t a) -> m (Event t (Map k a))
 switchMergeEvents mapChanges = switch . fmap mergeMap  <$> holdMap mapChanges 
 
+
 instance (Semigroup a, Reflex t) => SwitchMerge t (Event t a) where
   switchMerge initial updates = fmap (foldl1 (<>)) <$> switchMergeEvents (UpdatedMap initial updates)
   
-instance (Semigroup a, Reflex t) => SwitchMerge t (Events t a) where
-  switchMerge initial updates = events <$> switchMerge' (mergeEvents <$> UpdatedMap initial updates)
+instance (Semigroup a, Reflex t) => SwitchMerge t [Event t a] where
+  switchMerge initial updates = pure <$> switchMerge' (mergeWith (<>) <$> UpdatedMap initial updates)
 
   
 instance (Monoid a, Reflex t) => SwitchMerge t (Behavior t a) where
@@ -74,17 +54,17 @@ instance (Monoid a, Reflex t) => SwitchMerge t (Behavior t a) where
     where joinMap m = sample =<< fold <$> sample m
   
   
-instance (Monoid a, Reflex t) => SwitchMerge t (Behaviors t a) where
-  switchMerge initial updates = behaviors <$> switchMerge' (mergeBehaviors <$> UpdatedMap initial updates)  
+instance (Monoid a, Reflex t) => SwitchMerge t [Behavior t a] where
+  switchMerge initial updates = pure <$> switchMerge' (mconcat <$> UpdatedMap initial updates)  
   
 instance (Reflex t) => SwitchMerge t () where
   switchMerge _ _ = pure ()  
 
-instance (Monoid a, Reflex t) => Switching t (Behaviors t a)  where
-  switching bs updates = behaviors <$> switching (mergeBehaviors bs) (mergeBehaviors <$> updates)
+instance (Monoid a, Reflex t) => Switching t [Behavior t a]  where
+  switching bs updates = pure <$> switching (mconcat bs) (mconcat <$> updates)
 
-instance (Semigroup a, Reflex t) => Switching t (Events t a) where
-  switching es updates = events <$> switching (mergeEvents es) (mergeEvents <$> updates)
+instance (Semigroup a, Reflex t) => Switching t [Event t a] where
+  switching es updates = pure <$> switching (mergeWith (<>) es) (mergeWith (<>) <$> updates)
   
     
 instance (Monoid a, Reflex t) => Switching t (Behavior t a)  where
