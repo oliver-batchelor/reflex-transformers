@@ -11,11 +11,13 @@ module Reflex.Monad
   
   , holdM
   
-  , listWithKey
-  , collection
+  , collectMapM
+  , collectM
   
-  , Workflow (..)
-  , workflow
+  , collect
+  
+  , Flow (..)
+  , flowM
   
   , Chain (..)
   , chainM
@@ -34,6 +36,7 @@ import Data.Monoid
 import Data.List
 
 import Reflex.Monad.Class
+import Reflex.Monad.ReflexM
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -41,36 +44,45 @@ import qualified Data.Map.Strict as Map
 
 import Prelude hiding ((.)) -- Silence AMP warnings
 
+
   
 
 holdM :: (MonadSwitch t m) => m a -> Event t (m a) -> m (Dynamic t a)
 holdM initial e = holdDyn' =<< switchM (Updated initial e)
 
 
-   
-collection :: (MonadSwitch t m) => [m (a, Event t ())] -> Event t [m (a, Event t ())] -> m (Dynamic t [a])
-collection initial added = do
+withIds :: (MonadReflex t m) => [a] -> Event t [a] -> m (Map Int a, Event t (Map Int a))
+withIds initial added = do
+  count <- current <$> (foldDyn (+) (genericLength initial) $ genericLength <$> added)
+  return (zipFrom 0 initial, attachWith zipFrom count added)
+    where
+      zipFrom n = Map.fromList . zip [n..] 
+    
+
+
+collect :: (MonadReflex t m) => [(a, Event t ())] -> Event t [(a, Event t ())] -> m (UpdatedMap t Int a)
+collect initial added = runReflexM $ collectM (pure <$> initial)  (fmap pure <$> added)
+    
+    
+collectM :: (MonadSwitch t m) => [m (a, Event t ())] -> Event t [m (a, Event t ())] -> m (UpdatedMap t Int a)
+collectM initial added = do 
+  (initialMap, addedMap) <- withIds initial added
   rec
-    count <- current <$> (foldDyn (+) (genericLength initial) $ genericLength <$> added)
-    let updates = mergeWith (<>) 
-          [ fmap Just <$> attachWith zipFrom count added
-          , toRemove 
-          ]
-  
-    updatedViews <- switchMapM (UpdatedMap initialViews updates)
-    toRemove <- switchMerge' $ toRemovals $ snd <$> updatedViews
-  
-  mapDyn Map.elems =<< holdMapDyn (fst <$> updatedViews)
+    
+    (values, remove) <- fmap split <$> switchMapM $ UpdatedMap initialMap $ 
+        mergeWith (<>) [ fmap Just <$> addedMap, toRemove ]
+      
+    toRemove <- switchMerge' $ makeRemovals remove
+  return values
 
   where
-    zipFrom n = Map.fromList . zip [n..] 
-    initialViews = zipFrom (0::Integer) initial
-    toRemovals = imap (\k -> fmap $ const $ Map.singleton k Nothing)
-    
+    makeRemovals = imap (\k -> fmap $ const $ Map.singleton k Nothing)    
+  
+  
     
 
-listWithKey :: (MonadSwitch t m, Ord k) => Dynamic t (Map k v) -> (k -> Dynamic t v ->  m a) ->  m (Dynamic t (Map k a))
-listWithKey input childView =  do
+collectMapM :: (MonadSwitch t m, Ord k) => Dynamic t (Map k v) -> (k -> Dynamic t v ->  m a) ->  m (Dynamic t (Map k a))
+collectMapM input childView =  do
   inputViews <- mapDyn (Map.mapWithKey itemView) input
   let updates = shallowDiff (current inputViews) (updated inputViews)  
 
@@ -81,15 +93,29 @@ listWithKey input childView =  do
     itemView k v = holdDyn v (fmapMaybe (Map.lookup k) (updated input)) >>= childView k  
     
     
--- 
-newtype Workflow t m a = Workflow { unWorkflow :: m (a, Event t (Workflow t m a)) }
+newtype Flow t m a = Flow { unFlow :: m (a, Event t (Flow t m a)) }
 
-workflow :: (MonadSwitch t m) => Workflow t m a -> m (Dynamic t a)
-workflow (Workflow w) = do
+flowM :: (MonadSwitch t m) => Flow t m a -> m (Dynamic t a)
+flowM (Flow w) = do
   rec 
-    result <- holdM w $ unWorkflow <$> switch (snd <$> current result)
+    result <- holdM w $ unFlow <$> switch (snd <$> current result)
   mapDyn fst result        
     
+  
+  
+chainM :: (MonadSwitch t m) => Chain t m a b -> a -> m (Event t b)
+chainM c a = switchPromptlyDyn <$> flowM (toFlow c a)
+
+
+loopM :: (MonadSwitch t m) => (a -> m (Event t a)) -> a -> m (Event t a)
+loopM f a = do
+  rec
+    e <- switchPromptlyDyn <$> holdM (f a) (f <$> e)
+    
+  return e
+
+
+
   
 data Chain t m a b where
     Chain :: (a -> m (Event t b)) -> Chain t m a b
@@ -104,25 +130,14 @@ infixr 8 :>>
 Chain f    >-> c  =  f :>> c 
 (f :>> c') >-> c  =  f :>> (c' >-> c) 
 
-toWorkflow :: (MonadSwitch t m) => Chain t m a b -> a -> Workflow t m (Event t b)
-toWorkflow (Chain f) a = Workflow $ do 
+toFlow :: (MonadSwitch t m) => Chain t m a b -> a -> Flow t m (Event t b)
+toFlow (Chain f) a = Flow $ do 
   e <- f a 
   return (e, end <$ e)
-    where end = Workflow $ return (never, never)
+    where end = Flow $ return (never, never)
     
-toWorkflow (f :>> c) a = Workflow $ do
+toFlow (f :>> c) a = Flow $ do
   e <- f a
-  return (never, toWorkflow c <$> e)
+  return (never, toFlow c <$> e)
   
-chainM :: (MonadSwitch t m) => Chain t m a b -> a -> m (Event t b)
-chainM c a = switchPromptlyDyn <$> workflow (toWorkflow c a)
-
-
-loopM :: (MonadSwitch t m) => (a -> m (Event t a)) -> a -> m (Event t a)
-loopM f a = do
-  rec
-    e <- switchPromptlyDyn <$> holdM (f a) (f <$> e)
-    
-  return e
-
-
+  
