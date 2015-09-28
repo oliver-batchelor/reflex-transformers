@@ -18,10 +18,10 @@ module Reflex.Monad
   , workflow
   
   , Chain (..)
-  , runChain
+  , chainM
   , (>->)
   
-  , runLoop
+  , loopM
   
   ) where
 
@@ -114,12 +114,12 @@ toWorkflow (f :>> c) a = Workflow $ do
   e <- f a
   return (never, toWorkflow c <$> e)
   
-runChain :: (MonadSwitch t m) => Chain t m a b -> a -> m (Event t b)
-runChain c a = switchPromptlyDyn <$> workflow (toWorkflow c a)
+chainM :: (MonadSwitch t m) => Chain t m a b -> a -> m (Event t b)
+chainM c a = switchPromptlyDyn <$> workflow (toWorkflow c a)
 
 
-runLoop :: (MonadSwitch t m) => (a -> m (Event t a)) -> a -> m (Event t a)
-runLoop f a = do
+loopM :: (MonadSwitch t m) => (a -> m (Event t a)) -> a -> m (Event t a)
+loopM f a = do
   rec
     e <- switchPromptlyDyn <$> holdM (f a) (f <$> e)
     
