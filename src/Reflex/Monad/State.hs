@@ -1,33 +1,29 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 
-module Reflex.Monad.Supply
-  ( SupplyT 
-  , Supply
-  , runSupplyT
+module Reflex.Monad.State
+  ( StateT 
+  , State
+  
+  , runStateT
   , evalSupplyT
 
   , runSupply
   , evalSupply
   , runSplit
-    
-  , getFresh
-  , getSplit
-  
-  
-  
+     
+ 
   ) where
 
 
 import Reflex
 import Reflex.Monad.Class 
 
-
 import Control.Monad
 import Control.Monad.Identity
-import Control.Monad.State.Strict
-import Control.Monad.Writer.Class
-import Control.Monad.Reader.Class
+import Control.Monad.State.Class
+
+import Control.Monad.RSS.Strict
 
 import Data.Traversable
 import Data.Map.Strict (Map)
@@ -62,7 +58,7 @@ deriving instance MonadWriter w m => MonadWriter w (SupplyT s m)
 deriving instance MonadSample t m => MonadSample t (SupplyT s m)
 deriving instance MonadHold t m => MonadHold t (SupplyT s m)
 
-type Supply s a = SupplyT s Identity a
+type State s a = SupplyT s Identity a
 
   
 instance MonadState st m => MonadState st (SupplyT s m)  where
@@ -79,7 +75,7 @@ getSplit = SupplyT $ state splitSupply
 
 
 
-runSplit ::  (Monad m, Splitable s i) =>  SupplyT s m a -> Supply s (m a)
+runSplit ::  (Monad m, Splitable s i) =>  SupplyT s m a -> State s (m a)
 runSplit m = evalSupplyT m <$> getSplit
   
 
@@ -90,10 +86,10 @@ evalSupplyT :: Monad m => SupplyT s m a -> s -> m a
 evalSupplyT (SupplyT m) = evalStateT m 
 
 
-runSupply :: Supply s a -> s -> (a, s)
+runSupply :: State s a -> s -> (a, s)
 runSupply m  = runIdentity . runSupplyT m 
 
-evalSupply :: Supply s a -> s -> a
+evalSupply :: State s a -> s -> a
 evalSupply m = runIdentity . evalSupplyT m
 
 
