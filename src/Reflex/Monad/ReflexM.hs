@@ -36,15 +36,15 @@ instance MonadHold t (ReflexM t) where
   
 
   
+instance Reflex t => MonadPerform t (ReflexM t) where
+  type Performs (ReflexM t) a = a
+
+  collect = id
+  perform e = return $ pushAlways runReflexM e 
+  
+  
 instance Reflex t => MonadSwitch t (ReflexM t) where
     
-    switchM (Updated initial e) = do
-      a <- runReflexM initial 
-      return $ Updated a $ pushAlways runReflexM e
-              
-    switchMapM (UpdatedMap initial e) = do
-      a <- traverse runReflexM initial
-      return $ UpdatedMap a $ 
-        pushAlways (traverse $ traverse runReflexM) e
-      
+    switchM = return
+    switchMapM = return
   
