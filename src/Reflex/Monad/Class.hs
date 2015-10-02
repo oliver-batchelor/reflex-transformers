@@ -22,12 +22,6 @@ import Reflex
 import Reflex.Updated
 import Reflex.Switching
 
-import Data.Maybe
-
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
-
-
 import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.Writer
@@ -40,66 +34,54 @@ import Prelude
 -- Constraint type to capture common usage together
 type MonadReflex t m = (Reflex t, MonadHold t m, MonadFix m)    
 
-    
-class (MonadReflex t m) => MonadSwitch t m | m -> t where
+
+class (MonadReflex t m) => MonadPerform t m | m -> t where
+  type Performs m :: *
   
-  -- | Map the result of an initial monadic action and updates and swap 
-  -- it out with a new one whenever the event provided fires.
-  -- returns an 'Updated' giving the initial value plus updates
-  -- 
-    switchM ::  Updated t (m a) -> m (Updated t a)
-    switchM u = do 
-      m <- switchMapM (toMap (Just <$> u))
-      return $ fmap fromJust $ fromMap m
-    
-        
-  -- | Similar to holdM but operating on a collection of widgets
-  -- provided as an 'UpdatedMap'.
-  -- switchM/switchM' can be implemented in terms of switchMapM 
-  -- therefore switchMapM is a minimal implementation.
-    switchMapM ::  Ord k => UpdatedMap t k (m a) -> m (UpdatedMap t k a)
-    
+  collect :: m a -> m (a, Performs m)
+  perform ::  Event t (m a) -> m (Event t (a, Performs m))
+ 
+
+
+class (MonadPerform t m) => MonadSwitch t m | m -> t where
+    switchM ::  Updated t (Performs m) -> m ()
+    switchMapM ::  Ord k => UpdatedMap t k (Performs m) -> m ()   
     
   
+instance MonadPerform t m => MonadPerform t (ReaderT e m) where
+  type Performs (ReaderT e m) = Performs m
+
+  collect m = do
+    env <- ask
+    lift $ collect $ runReaderT m env
+  perform e = do
+    env <- ask
+    lift $ perform (flip runReaderT env <$> e)
+  
+  
+
 instance MonadSwitch t m => MonadSwitch t (ReaderT e m) where
-
-  switchM u = do
-    env   <- ask
-    lift $ switchM (flip runReaderT env <$> u)
-    
+  switchM = lift . switchM
+  switchMapM = lift . switchMapM
   
-  switchMapM um = do
-    env   <- ask
-    lift . switchMapM $ flip runReaderT env <$> um
-
-    
-
-instance (MonadSwitch t m, SwitchMerge t w) => MonadSwitch t (WriterT w m) where
-
-  switchM u = do
-    (a, w) <- lift $ split <$> switchM (runWriterT <$> u)
-    tell =<< switching' w
-    return a
-    
-
-  switchMapM um = do
-    (a, w) <- lift $ split <$> switchMapM (runWriterT <$> um)
-    tell =<< switchMerge' w
-    return a
-    
   
+rearrange :: ((a, w), p) -> (a, (w, p))
+rearrange ((a, w), p) = (a, (w, p))
+    
+    
+instance (MonadPerform t m, Monoid w) => MonadPerform t (WriterT w m) where
+  type Performs (WriterT w m) = (w, Performs m)
 
- -- | A few conversions for switchM in terms of switchMapM
-maybeToMap :: Maybe a -> Map () a
-maybeToMap Nothing  = mempty
-maybeToMap (Just a) = Map.singleton () a
+  collect m = lift $ rearrange <$> (collect $ runWriterT m)    
+  perform e = lift $ fmap rearrange <$> (perform (runWriterT <$> e))
 
-mapToMaybe :: Map () a -> Maybe a
-mapToMaybe m = listToMaybe $ Map.elems m 
- 
-toMap :: Reflex t =>  Updated t (Maybe a) -> UpdatedMap t () a
-toMap (Updated initial e) = UpdatedMap (maybeToMap initial) (Map.singleton () <$> e)
- 
-fromMap :: Reflex t => UpdatedMap t () a -> Updated t (Maybe a)
-fromMap (UpdatedMap initial e) = Updated (mapToMaybe initial) (fmapMaybe mapToMaybe e)  
+    
+instance (MonadSwitch t m, SwitchMerge t w) => MonadSwitch t (WriterT w m) where    
+    switchM w = do 
+      tell =<< switching' (fst <$> w)
+      lift $ switchM (snd <$> w)
+      
+    switchMapM w = do 
+      tell =<< switchMerge' (fst <$> w)
+      lift $ switchMapM (snd <$> w)
 
