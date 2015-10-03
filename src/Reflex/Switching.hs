@@ -11,6 +11,7 @@ import Data.Map.Strict (Map)
 
 import Control.Monad
 import Control.Monad.Fix
+import Control.Applicative
 import Data.Semigroup
 import Data.Maybe
 import Data.Foldable
@@ -31,10 +32,8 @@ instance (Switching t a, Switching t b) => Switching t (a, b) where
   
   
 instance (SwitchMerge t a, SwitchMerge t b) => SwitchMerge t (a, b) where
-  switchMerge initial e = do
-    a <- switchMerge (fst <$> initial) (fmap (fmap fst) <$> e)
-    b <- switchMerge (snd <$> initial) (fmap (fmap snd) <$> e)
-    return (a, b)
+  switchMerge initial e = liftA2 (,) (switchMerge' a) (switchMerge' b)
+      where (a, b) = split $ UpdatedMap initial e
 
 
 -- This will hopefully become a primitive (faster!)
