@@ -6,6 +6,8 @@ module Reflex.Monad.Class
   ( MonadSwitch (..)  
   , MonadPerform(..)
   
+  , collect_
+  
   , MonadReflex
   
   , module Reflex
@@ -39,10 +41,14 @@ type MonadReflex t m = (Reflex t, MonadHold t m, MonadFix m)
 class (MonadReflex t m) => MonadPerform t m | m -> t where
   type Performs m a :: * 
   
-  collect :: m a -> m (Performs m a)
-  perform ::  Event t (m a) -> m (Event t (Performs m a))
+  collect :: m (a, b) -> m (Performs m a, b)
+  perform ::  Event t (m a) -> m (Event t a)
  
 
+collect_ :: MonadPerform t m =>  m a -> m (Performs m a)
+collect_ m = fst <$> collect ((, ()) <$> m)
+
+ 
 
 class (MonadPerform t m) => MonadSwitch t m | m -> t where
     switchM ::  Updated t (Performs m a) -> m (Updated t a)
@@ -64,23 +70,24 @@ instance MonadSwitch t m => MonadSwitch t (ReaderT e m) where
   switchMapM = lift . switchMapM
   
   
-    
+swap2 :: ((a, b), w) -> ((a, w), b)
+swap2 ((a, b), w) = ((a, w), b)
     
 instance (MonadPerform t m, Monoid w) => MonadPerform t (WriterT w m) where
   type Performs (WriterT w m) a = Performs m (a, w)
 
-  collect = lift . collect . runWriterT
-  perform e = lift . perform $ runWriterT <$> e
+  collect = lift . collect . fmap swap2 . runWriterT
+  perform e = lift . perform $ fmap fst . runWriterT <$> e
 
     
 instance (MonadSwitch t m, SwitchMerge t w) => MonadSwitch t (WriterT w m) where    
-    switchM w = do 
-      (a, w) <- lift $ split <$> switchM w
+    switchM u = do 
+      (a, w) <- lift $ split <$> switchM u
       tell =<< switching' w
       return a
             
-    switchMapM w = do
-      (a, w) <- lift $ split <$> switchMapM w
+    switchMapM um = do
+      (a, w) <- lift $ split <$> switchMapM um
       tell =<< switchMerge' w
       return a
     

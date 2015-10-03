@@ -26,11 +26,7 @@ import Reflex.Monad.Class
 import Control.Monad
 import Control.Monad.Identity
 import Control.Monad.State.Strict
-import Control.Monad.Writer.Class
 import Control.Monad.Reader.Class
-
-import Data.Traversable
-import Data.Map.Strict (Map)
 
 import Prelude
 
@@ -97,47 +93,39 @@ evalSupply :: Supply s a -> s -> a
 evalSupply m = runIdentity . evalSupplyT m
 
 
+tup ::  ((a, b), s) -> (a, (b, s))
+tup ((a, b), s)  = (a, (b, s))
 
-instance (MonadPerform t m, Splitable s i) => MonadPerform t (SupplyT w m) where
-  type Performs (SupplyT s m) a = m
+unTup :: (a, (b, s)) -> ((a, b), s)
+unTup (a, (b, s))  = ((a, b), s)
+
+
+instance (MonadPerform t m, Splitable s i) => MonadPerform t (SupplyT s m) where
+  type Performs (SupplyT s m) a = Performs m a
 
   collect m = do 
-    s <- SupplyT $ get
-    lift $ collect $ runSupplyT m s
+    s <- SupplyT get
+    (p, s') <- fmap unTup $ lift  $ 
+      collect $ tup <$> runSupplyT m s
+      
+    SupplyT (put s') 
+    return p
+        
     
+  perform e = do 
+    s <- getSplit
+    rec
+      (a, es) <-  split <$> (lift . perform $ 
+        attachWith (flip runSupplyT) r e)
+      r <- hold s es 
     
-    
-  perform e = lift . perform $ runWriterT <$> e
+    return a
 
 
+instance MonadSwitch t m => MonadSwitch t (ReaderT e m) where
+  switchM = lift . switchM
+  switchMapM = lift . switchMapM
 
   
--- | Helpers for switchMapM implementation
-runSupplyMap :: (Ord k, Monad m, Splitable s i) =>  Map k (SupplyT s m a) -> s -> (Map k (m a), s) 
-runSupplyMap m =  runSupply (traverse runSplit m) 
-  
-runSupplyMap' :: (Ord k, Monad m, Splitable s i) =>  Map k (Maybe (SupplyT s m a)) -> s -> (Map k (Maybe (m a)), s) 
-runSupplyMap' m =  runSupply (traverse (traverse runSplit) m) 
- 
--- instance (MonadSwitch t m, Splitable s i) => MonadSwitch t (SupplyT s m) where
--- 
---   switchM (Updated initial e) = do    
---     s <- getSplit
---     rec
---       (a, us) <- lift (split <$> switchM (Updated (runSupplyT initial s) $
---           attachWith (flip runSupplyT) r e))
---       r <- hold' us
---     return a
--- 
--- 
---   switchMapM (UpdatedMap initial e) = do   
---     (initial', s) <- runSupplyMap initial <$> getSplit
---     
---     rec
---       let (um, us) = split $ attachWith (flip runSupplyMap') r e
---       a <- lift (switchMapM (UpdatedMap initial' um))
---       r <- hold s us
---       
---     return a
 --     
     

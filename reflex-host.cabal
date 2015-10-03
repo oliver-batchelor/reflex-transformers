@@ -59,6 +59,8 @@ library
     , lens
     , semigroups
     , containers
+    , stateWriter
+    
   default-extensions:
     TupleSections
     RecursiveDo
@@ -80,6 +82,7 @@ library
     Reflex.Monad.Class
     Reflex.Monad.ReflexM
     Reflex.Monad.Supply
+    Reflex.Monad.State
 
     Reflex.Switching
     Reflex.Updated

@@ -1,125 +1,118 @@
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 
 module Reflex.Monad.State
   ( StateT 
   , State
-  
   , runStateT
-  , evalSupplyT
+  , evalStateT
 
-  , runSupply
-  , evalSupply
-  , runSplit
-     
- 
+  , runState
+  , evalState
+
   ) where
 
 
 import Reflex
 import Reflex.Monad.Class 
 
+
 import Control.Monad
 import Control.Monad.Identity
-import Control.Monad.State.Class
+import Control.Monad.State.Strict as S
+import Control.Monad.Reader.Class
 
-import Control.Monad.RSS.Strict
-
-import Data.Traversable
-import Data.Map.Strict (Map)
+import Control.Lens
 
 import Prelude
 
 
-class Splitable s i | s -> i where
-  
-  freshId :: s -> (i, s)
-  splitSupply :: s -> (s, s)
-  
-
-
-
-instance Enum a => Splitable [a] [a] where
-  freshId []     = ([], [toEnum 0])
-  freshId (x:xs) = (x:xs, succ x:xs)
-  
-  splitSupply xs = (toEnum 0:xs, xs')
-    where xs' = snd (freshId xs)
+data Env t s = Env 
+  { _env_state    :: !s
+  , _env_current  :: !Behavior t s
+  , _env_updated  :: !Event t s
+  }
 
     
-    
-newtype SupplyT s m a = SupplyT (StateT s m a)
+newtype StateT s m a = StateT (S.StateT (Behavior t s, Event t s, s) m a)
   deriving (Functor, Applicative, Monad, MonadTrans, MonadFix)
   
   
-deriving instance MonadReader st m => MonadReader st (SupplyT s m)
-deriving instance MonadWriter w m => MonadWriter w (SupplyT s m)
+deriving instance MonadReader e m => MonadReader e (StateT s m)
+deriving instance MonadWriter w m => MonadWriter w (StateT s m)
 
-deriving instance MonadSample t m => MonadSample t (SupplyT s m)
-deriving instance MonadHold t m => MonadHold t (SupplyT s m)
+deriving instance MonadSample t m => MonadSample t (StateT s m)
+deriving instance MonadHold t m => MonadHold t (StateT s m)
 
-type State s a = SupplyT s Identity a
+type State s a = StateT s Identity a
 
   
-instance MonadState st m => MonadState st (SupplyT s m)  where
-  get = lift get
+instance  MonadState s (StateT s m)  where
+  get = lift  get
   put = lift . put
 
 
-getFresh :: (Monad m, Splitable s i) => SupplyT s m i
-getFresh = SupplyT $ state freshId
+getFresh :: (Monad m, Splitable s i) => StateT s m i
+getFresh = StateT $ state freshId
 
 
-getSplit :: (Monad m, Splitable s i) => SupplyT s m s
-getSplit = SupplyT $ state splitSupply
+getSplit :: (Monad m, Splitable s i) => StateT s m s
+getSplit = StateT $ state splitState
 
 
 
-runSplit ::  (Monad m, Splitable s i) =>  SupplyT s m a -> State s (m a)
-runSplit m = evalSupplyT m <$> getSplit
+runSplit ::  (Monad m, Splitable s i) =>  StateT s m a -> State s (m a)
+runSplit m = evalStateT m <$> getSplit
   
 
-runSupplyT :: Monad m => SupplyT s m a -> s -> m (a, s)
-runSupplyT (SupplyT m) = runStateT m 
+runStateT :: Monad m => StateT s m a -> s -> m (a, s)
+runStateT (StateT m) = runStateT m 
 
-evalSupplyT :: Monad m => SupplyT s m a -> s -> m a
-evalSupplyT (SupplyT m) = evalStateT m 
-
-
-runSupply :: State s a -> s -> (a, s)
-runSupply m  = runIdentity . runSupplyT m 
-
-evalSupply :: State s a -> s -> a
-evalSupply m = runIdentity . evalSupplyT m
+evalStateT :: Monad m => StateT s m a -> s -> m a
+evalStateT (StateT m) = evalStateT m 
 
 
-  
--- | Helpers for switchMapM implementation
-runSupplyMap :: (Ord k, Monad m, Splitable s i) =>  Map k (SupplyT s m a) -> s -> (Map k (m a), s) 
-runSupplyMap m =  runSupply (traverse runSplit m) 
-  
-runSupplyMap' :: (Ord k, Monad m, Splitable s i) =>  Map k (Maybe (SupplyT s m a)) -> s -> (Map k (Maybe (m a)), s) 
-runSupplyMap' m =  runSupply (traverse (traverse runSplit) m) 
- 
-instance (MonadSwitch t m, Splitable s i) => MonadSwitch t (SupplyT s m) where
+-- runState :: State s a -> s -> (a, s)
+-- runState m  = runIdentity . runStateT m 
+-- 
+-- evalState :: State s a -> s -> a
+-- evalState m = runIdentity . evalStateT m
 
-  switchM (Updated initial e) = do    
+
+tup ::  ((a, b), s) -> (a, (b, s))
+tup ((a, b), s)  = (a, (b, s))
+
+unTup :: (a, (b, s)) -> ((a, b), s)
+unTup (a, (b, s))  = ((a, b), s)
+
+
+instance (MonadPerform t m, Splitable s i) => MonadPerform t (StateT s m) where
+  type Performs (StateT s m) a = Performs m a
+
+  collect m = do 
+    s <- StateT get
+    (p, s') <- fmap unTup $ lift  $ 
+      collect $ tup <$> runStateT m s
+      
+    StateT (put s') 
+    return p
+        
+    
+  perform e = do 
     s <- getSplit
     rec
-      (a, us) <- lift (split <$> switchM (Updated (runSupplyT initial s) $
-          attachWith (flip runSupplyT) r e))
-      r <- hold' us
+      (a, es) <-  split <$> (lift . perform $ 
+        attachWith (flip runStateT) r e)
+      r <- hold s es 
+    
     return a
 
 
-  switchMapM (UpdatedMap initial e) = do   
-    (initial', s) <- runSupplyMap initial <$> getSplit
-    
-    rec
-      let (um, us) = split $ attachWith (flip runSupplyMap') r e
-      a <- lift (switchMapM (UpdatedMap initial' um))
-      r <- hold s us
-      
-    return a
-    
+instance MonadSwitch t m => MonadSwitch t (ReaderT e m) where
+  switchM = lift . switchM
+  switchMapM = lift . switchMapM
+
+  
+--     
     
