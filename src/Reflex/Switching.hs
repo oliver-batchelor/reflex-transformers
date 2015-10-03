@@ -45,28 +45,23 @@ switchMergeEvents mapChanges = switch . fmap mergeMap  <$> holdMap mapChanges
 instance (Semigroup a, Reflex t) => SwitchMerge t (Event t a) where
   switchMerge initial updates = fmap (foldl1 (<>)) <$> switchMergeEvents (UpdatedMap initial updates)
   
-instance (Semigroup a, Reflex t) => SwitchMerge t [Event t a] where
-  switchMerge initial updates = pure <$> switchMerge' (mergeWith (<>) <$> UpdatedMap initial updates)
-
   
 instance (Monoid a, Reflex t) => SwitchMerge t (Behavior t a) where
   switchMerge initial updates = pull <$> joinMap <$> holdMap (UpdatedMap initial updates)
     where joinMap m = sample =<< fold <$> sample m
   
   
-instance (Monoid a, Reflex t) => SwitchMerge t [Behavior t a] where
-  switchMerge initial updates = pure <$> switchMerge' (mconcat <$> UpdatedMap initial updates)  
+instance (SwitchMerge t a, Monoid a, Reflex t) => SwitchMerge t [a] where
+  switchMerge initial updates = pure <$> switchMerge' (mconcat <$> UpdatedMap initial updates) 
+  
+instance (Switching t a, Monoid a, Reflex t) => Switching t [a]  where
+  switching bs updates = pure <$> switching (mconcat bs) (mconcat <$> updates)  
+  
   
 instance (Reflex t) => SwitchMerge t () where
   switchMerge _ _ = pure ()  
 
-instance (Monoid a, Reflex t) => Switching t [Behavior t a]  where
-  switching bs updates = pure <$> switching (mconcat bs) (mconcat <$> updates)
 
-instance (Semigroup a, Reflex t) => Switching t [Event t a] where
-  switching es updates = pure <$> switching (mergeWith (<>) es) (mergeWith (<>) <$> updates)
-  
-    
 instance (Monoid a, Reflex t) => Switching t (Behavior t a)  where
   switching = switcher
     
