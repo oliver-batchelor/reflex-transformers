@@ -1,19 +1,20 @@
-name:          reflex-host
-version:       0.3
+name:          reflex-transformers
+version:       0.1
 license:       BSD3
 license-file:  LICENSE
 cabal-version: >= 1.10
-author:        Benno Fünfstück
-maintainer:    Benno Fünfstück <benno.fuenfstueck@gmail.com>
+author:        Oliver Batchelor
+maintainer:    saulzar@gmail.com
 stability:     experimental
-homepage:      http://github.com/bennofs/reflex-host/
+homepage:      http://github.com/saulzar/reflex-
 bug-reports:   http://github.com/bennofs/reflex-host/issues
-copyright:     Copyright (C) 2014 Benno Fünfstück
-synopsis:      Implementation support for reflex frameworks
+copyright:     Copyright (C) 2014 Oliver Batchelor
+synopsis:      Collections and switchable Monad transformers for Reflex
 description:   
-  The reflex FRP library's functions for implementing a framework are quite lowlevel. 
-  This library provides higher-level support for on top of the basic functions from reflex.
-  It provides a monad with support for external event sources and performing IO actions in response to events.
+  This library provides a set of Monad transformers (and instances for common transformers) on top of 
+  widget switching primitives for reflex. For example ReaderT and WriterT which operate in the presence 
+  of widget switching, allowing you to pass inputs and outputs up and down the UI tree.
+  
 build-type:    Custom
 
 extra-source-files:
@@ -25,23 +26,8 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/bennofs/reflex-host.git
+  location: https://github.com/saulzar/reflex-transformers.git
 
-  
-benchmark bench-builder-all
-  type:             exitcode-stdio-1.0
-  hs-source-dirs:   bench
-  main-is:          Performance.hs
-  build-depends:    
-      base  >= 4.4 && < 5
-    , criterion
-    , reflex-host >= 0.2
-    , reflex
-    , containers
-    , mtl
-    , lens
-                    
-  ghc-options:      -O2  
   
   
 library
@@ -80,16 +66,10 @@ library
     Reflex.Monad.Class
     Reflex.Monad.ReflexM
     Reflex.Monad.Supply
-
     Reflex.Switching
     Reflex.Updated
 
-    Reflex.Monad.App
-
-    Reflex.Monad.IO
-    Reflex.Monad.IO.HostActions
-  
-
+ 
   ghc-options: -Wall -O2 -threaded
 
 
