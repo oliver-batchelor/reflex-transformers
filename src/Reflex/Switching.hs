@@ -1,4 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Reflex.Switching where
@@ -14,7 +13,6 @@ import Control.Monad
 import Control.Monad.Fix
 import Control.Applicative
 import Data.Semigroup
-import Data.List.NonEmpty
 import Data.Maybe
 import Data.Foldable
 
@@ -30,7 +28,7 @@ class (Switching t r, Monoid r) => SwitchMerge t r  where
 
 
 instance (Switching t a, Switching t b) => Switching t (a, b) where
-  switching (a, b) e = liftM2 (,) (switching a $ fst <$> e) (switching b $ snd <$> e)
+  switching (a, b) e = liftA2 (,) (switching a $ fst <$> e) (switching b $ snd <$> e)
   
   
 instance (SwitchMerge t a, SwitchMerge t b) => SwitchMerge t (a, b) where

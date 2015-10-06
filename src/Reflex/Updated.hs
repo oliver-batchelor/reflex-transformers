@@ -15,6 +15,7 @@ import Reflex
 
 import Data.Monoid
 import Data.Maybe
+import Data.Functor
 
 import Control.Lens
 

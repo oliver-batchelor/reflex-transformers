@@ -39,12 +39,12 @@ library
     , reducers >= 3.11
     , mtl
     , reflex >= 0.3
-    , dlist
-    , dependent-sum
     , transformers 
     , lens
     , semigroups
     , containers
+    , stateWriter
+    
   default-extensions:
     TupleSections
     RecursiveDo
@@ -66,8 +66,11 @@ library
     Reflex.Monad.Class
     Reflex.Monad.ReflexM
     Reflex.Monad.Supply
+    Reflex.Monad.ReaderWriter
+    
     Reflex.Switching
     Reflex.Updated
+    
 
  
   ghc-options: -Wall -O2 -threaded

@@ -26,7 +26,6 @@ import Reflex.Monad.Class
 import Control.Monad
 import Control.Monad.Identity
 import Control.Monad.State.Strict
-import Control.Monad.Writer.Class
 import Control.Monad.Reader.Class
 
 import Data.Traversable

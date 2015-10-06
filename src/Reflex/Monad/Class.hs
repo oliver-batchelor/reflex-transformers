@@ -50,7 +50,7 @@ class (MonadReflex t m) => MonadSwitch t m | m -> t where
     switchM ::  Updated t (m a) -> m (Updated t a)
     switchM u = do 
       m <- switchMapM (toMap (Just <$> u))
-      return $ fmap fromJust $ fromMap m
+      return $ fromJust <$> fromMap m
     
         
   -- | Similar to holdM but operating on a collection of widgets
