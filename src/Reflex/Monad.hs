@@ -53,7 +53,7 @@ holdM initial e = holdDyn' =<< switchM (Updated initial e)
 
 withIds :: (MonadReflex t m) => [a] -> Event t [a] -> m (Map Int a, Event t (Map Int a))
 withIds initial added = do
-  count <- current <$> (foldDyn (+) (genericLength initial) $ genericLength <$> added)
+  count <- current <$> (foldDyn (+) (genericLength initial)  (genericLength <$> added))
   return (zipFrom 0 initial, attachWith zipFrom count added)
     where
       zipFrom n = Map.fromList . zip [n..] 

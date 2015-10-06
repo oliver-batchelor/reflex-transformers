@@ -18,8 +18,6 @@ import Data.Maybe
 import Data.Functor
 
 import Control.Lens
-
-import Control.Monad
 import Control.Monad.Fix
 
 import Data.Map.Strict (Map)
@@ -42,7 +40,7 @@ instance Reflex t => Functor (Updated t) where
   
   
 instance Reflex t => FunctorWithIndex k (UpdatedMap t k) where
-  imap f (UpdatedMap initial changes) = UpdatedMap (imap f initial) (imap (\i -> fmap (f i)) <$> changes)
+  imap f (UpdatedMap initial changes) = UpdatedMap (imap f initial) (imap (fmap . f) <$> changes)
 
 
 split :: Functor f => f (a, b) -> (f a, f b)
