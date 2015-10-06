@@ -6,9 +6,9 @@ cabal-version: >= 1.10
 author:        Oliver Batchelor
 maintainer:    saulzar@gmail.com
 stability:     experimental
-homepage:      http://github.com/saulzar/reflex-
-bug-reports:   http://github.com/bennofs/reflex-host/issues
-copyright:     Copyright (C) 2014 Oliver Batchelor
+homepage:      http://github.com/saulzar/reflex-transformers
+bug-reports:   http://github.com/saulzar/reflex-transformers/issues
+copyright:     Copyright (C) 2015 Oliver Batchelor
 synopsis:      Collections and switchable Monad transformers for Reflex
 description:   
   This library provides a set of Monad transformers (and instances for common transformers) on top of 
