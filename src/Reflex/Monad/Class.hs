@@ -102,3 +102,4 @@ toMap (Updated initial e) = UpdatedMap (maybeToMap initial) (Map.singleton () <$
 fromMap :: Reflex t => UpdatedMap t () a -> Updated t (Maybe a)
 fromMap (UpdatedMap initial e) = Updated (mapToMaybe initial) (fmapMaybe mapToMaybe e)  
 
+{-# ANN module "HLint: ignore Use import/export shortcut" #-}
