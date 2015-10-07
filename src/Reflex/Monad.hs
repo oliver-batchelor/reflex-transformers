@@ -34,6 +34,7 @@ import Control.Category
 
 import Data.Monoid
 import Data.List
+import Data.Functor
 
 import Reflex.Monad.Class
 import Reflex.Monad.ReflexM
