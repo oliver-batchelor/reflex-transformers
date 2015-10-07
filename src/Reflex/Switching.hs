@@ -16,7 +16,7 @@ import Data.Semigroup
 import Data.Maybe
 import Data.Foldable
 
-import Prelude
+import Prelude hiding (foldl1)
 
 
 class (Reflex t) => Switching t r  where
