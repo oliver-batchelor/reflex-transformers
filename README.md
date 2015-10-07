@@ -1,4 +1,4 @@
-reflex-transformers [![Build Status](https://secure.travis-ci.org/saulzar/reflex-transformers.png?branch=master)](http://travis-ci.org/saulzar/reflex-transformers)
+reflex-transformers [![Build Status](https://secure.travis-ci.org/Saulzar/reflex-transformers.png?branch=master)](http://travis-ci.org/saulzar/reflex-transformers)
 ====================
 
 ## Introduction
