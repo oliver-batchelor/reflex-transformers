@@ -49,6 +49,7 @@ library
     RecursiveDo
     FlexibleInstances
     FlexibleContexts
+    ConstraintKinds
     StandaloneDeriving
     FunctionalDependencies
     RecordWildCards

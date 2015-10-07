@@ -1,5 +1,4 @@
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE ConstraintKinds #-}
 
 module Reflex.Monad.Class
   ( MonadSwitch (..)  

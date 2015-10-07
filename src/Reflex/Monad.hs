@@ -30,7 +30,6 @@ module Reflex.Monad
 import Control.Applicative
 import Control.Monad
 import Control.Lens
-import Control.Category
 
 import Data.Monoid
 import Data.List
@@ -43,7 +42,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
 
-import Prelude hiding ((.)) -- Silence AMP warnings
+import Prelude 
 
 
   
