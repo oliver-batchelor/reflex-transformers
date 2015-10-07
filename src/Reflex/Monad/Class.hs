@@ -22,6 +22,7 @@ import Reflex.Updated
 import Reflex.Switching
 
 import Data.Maybe
+import Data.Functor
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map

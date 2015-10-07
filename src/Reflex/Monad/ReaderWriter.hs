@@ -1,6 +1,4 @@
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE TemplateHaskell #-}
-
 
 module Reflex.Monad.ReaderWriter
   ( ReaderWriterT 
