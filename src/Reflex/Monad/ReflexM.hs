@@ -6,6 +6,8 @@ import Control.Applicative
 import Control.Monad.Fix
 import Reflex.Monad.Class
 
+import Data.Traversable
+
 import Prelude
 
 

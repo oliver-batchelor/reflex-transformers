@@ -15,7 +15,7 @@ description:
   widget switching primitives for reflex. For example ReaderT and WriterT which operate in the presence 
   of widget switching, allowing you to pass inputs and outputs up and down the UI tree.
   
-build-type:    Custom
+build-type:    Simple
 
 extra-source-files:
   .ghci

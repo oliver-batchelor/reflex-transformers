@@ -28,7 +28,9 @@ import Control.Monad.Identity
 import Control.Monad.State.Strict
 import Control.Monad.Reader.Class
 
+import Data.Functor
 import Data.Traversable
+
 import Data.Map.Strict (Map)
 
 import Prelude
