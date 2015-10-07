@@ -27,6 +27,7 @@ import Control.Monad
 import Control.Monad.Identity
 import Control.Monad.State.Strict
 import Control.Monad.Reader.Class
+import Control.Applicative
 
 import Data.Functor
 import Data.Traversable

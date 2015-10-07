@@ -13,6 +13,7 @@ module Reflex.Monad.ReaderWriter
 import Reflex
 import Reflex.Monad.Class 
 
+import Control.Applicative
 import Control.Monad
 import Control.Monad.Identity
 
