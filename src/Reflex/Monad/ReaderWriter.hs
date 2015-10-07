@@ -13,6 +13,8 @@ module Reflex.Monad.ReaderWriter
 import Reflex
 import Reflex.Monad.Class 
 
+import Data.Monoid
+
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Identity
@@ -23,8 +25,6 @@ import Control.Monad.State.Class
 import Control.Monad.Trans.Class
 
 import Prelude
-
-
 
     
 newtype ReaderWriterT r w m a = ReaderWriterT (RSST r w () m a)
