@@ -6,6 +6,8 @@ module Reflex.Monad.ReaderWriter
   
   , runReaderWriterT
   , runReaderWriter
+  
+  , execReaderWriterT
 
   ) where
 
@@ -51,6 +53,10 @@ runReaderWriterT :: (Monad m, Monoid w) => ReaderWriterT r w m a -> r -> m (a, w
 runReaderWriterT (ReaderWriterT m) r = do 
   (a, _, w) <- runRSST m r ()
   return (a, w)
+
+  
+execReaderWriterT :: (Monad m, Monoid w) => ReaderWriterT r w m a -> r -> m w
+execReaderWriterT m r = snd <$> runReaderWriterT m r
   
   
 runReaderWriter :: (Monoid w) => ReaderWriter r w a -> r -> (a, w) 

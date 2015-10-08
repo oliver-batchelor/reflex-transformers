@@ -79,6 +79,7 @@ collectM initial added = do
     makeRemovals = imap (\k -> fmap $ const $ Map.singleton k Nothing)    
   
   
+
     
 
 collectMapM :: (MonadSwitch t m, Ord k) => Dynamic t (Map k v) -> (k -> Dynamic t v ->  m a) ->  m (Dynamic t (Map k a))
