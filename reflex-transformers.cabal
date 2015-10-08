@@ -42,7 +42,7 @@ library
     transformers >= 0.2,
     lens >= 4.7 && < 4.14,
     semigroups >= 0.16 && < 0.18,
-    stateWriter >= 0.2 && < 0.3
+    stateWriter >= 0.2.5 && < 0.3
     
   default-extensions:
     TupleSections
