@@ -28,7 +28,14 @@ import Control.Monad.Trans.Class
 
 import Prelude
 
-    
+
+-- | Fusion between ReaderT and WriterT (But not StateT unlike RWST) 
+-- which is switchable using MonadSwitch
+--
+-- Uses implementation based on RSST which implements WriterT using state
+-- in order to avoid space leaks incurred by the original WriterT
+--  
+  
 newtype ReaderWriterT r w m a = ReaderWriterT (RSST r w () m a)
   deriving (Functor, Applicative, Monad, MonadTrans, MonadFix, MonadReader r, MonadWriter w)
   

@@ -9,21 +9,21 @@
 module Reflex.Monad 
   ( module Reflex.Monad.Class
   
-  , holdM
+  , widgetHold
   
-  , collectMapM
-  , collectM
+  , mapView
   
+  , collection
   , collect
   
-  , Flow (..)
-  , flowM
+  , Workflow (..)
+  , workflow
   
   , Chain (..)
-  , chainM
+  , chain
   , (>->)
   
-  , loopM
+  , loop
   
   ) where
 
@@ -47,8 +47,8 @@ import Prelude
 
   
 
-holdM :: (MonadSwitch t m) => m a -> Event t (m a) -> m (Dynamic t a)
-holdM initial e = holdDyn' =<< switchM (Updated initial e)
+widgetHold :: (MonadSwitch t m) => m a -> Event t (m a) -> m (Dynamic t a)
+widgetHold initial e = holdDyn' =<< switchM (Updated initial e)
 
 
 withIds :: (MonadReflex t m) => [a] -> Event t [a] -> m (Map Int a, Event t (Map Int a))
@@ -61,11 +61,11 @@ withIds initial added = do
 
 
 collect :: (MonadReflex t m) => [(a, Event t ())] -> Event t [(a, Event t ())] -> m (UpdatedMap t Int a)
-collect initial added = runReflexM $ collectM (pure <$> initial)  (fmap pure <$> added)
+collect initial added = runReflexM $ collection (pure <$> initial)  (fmap pure <$> added)
     
     
-collectM :: (MonadSwitch t m) => [m (a, Event t ())] -> Event t [m (a, Event t ())] -> m (UpdatedMap t Int a)
-collectM initial added = do 
+collection :: (MonadSwitch t m) => [m (a, Event t ())] -> Event t [m (a, Event t ())] -> m (UpdatedMap t Int a)
+collection initial added = do 
   (initialMap, addedMap) <- withIds initial added
   rec
     
@@ -82,8 +82,8 @@ collectM initial added = do
 
     
 
-collectMapM :: (MonadSwitch t m, Ord k) => Dynamic t (Map k v) -> (k -> Dynamic t v ->  m a) ->  m (Dynamic t (Map k a))
-collectMapM input childView =  do
+mapView :: (MonadSwitch t m, Ord k) => Dynamic t (Map k v) -> (k -> Dynamic t v ->  m a) ->  m (Dynamic t (Map k a))
+mapView input childView =  do
   inputViews <- mapDyn (Map.mapWithKey itemView) input
   let updates = shallowDiff (current inputViews) (updated inputViews)  
 
@@ -94,24 +94,38 @@ collectMapM input childView =  do
     itemView k v = holdDyn v (fmapMaybe (Map.lookup k) (updated input)) >>= childView k  
     
     
-newtype Flow t m a = Flow { unFlow :: m (a, Event t (Flow t m a)) }
+    
+-- | Provide a widget which swaps itself out for another widget upon an event
+-- (recursively)
+-- Useful if the sequence of widgets needs to return a value (as opposed to passing it 
+-- down the chain).
 
-flowM :: (MonadSwitch t m) => Flow t m a -> m (Dynamic t a)
-flowM (Flow w) = do
+
+newtype Workflow t m a = Workflow { unFlow :: m (a, Event t (Workflow t m a)) }
+
+workflow :: (MonadSwitch t m) => Workflow t m a -> m (Dynamic t a)
+workflow (Workflow w) = do
   rec 
-    result <- holdM w $ unFlow <$> switch (snd <$> current result)
+    result <- widgetHold w $ unFlow <$> switch (snd <$> current result)
   mapDyn fst result        
     
   
   
-chainM :: (MonadSwitch t m) => Chain t m a b -> a -> m (Event t b)
-chainM c a = switchPromptlyDyn <$> flowM (toFlow c a)
+-- | Provide a way of chaining widgets of type (a -> m (Event t b))
+-- where one widgets swaps out the old widget.
+-- De-couples the return type as compared to using 'workflow'
+
+chain :: (MonadSwitch t m) => Chain t m a b -> a -> m (Event t b)
+chain c a = switchPromptlyDyn <$> workflow (toFlow c a)
 
 
-loopM :: (MonadSwitch t m) => (a -> m (Event t a)) -> a -> m (Event t a)
-loopM f a = do
+-- | Provide a way of looping (a -> m (Event t a)), each iteration switches
+-- out the previous iteration.
+-- Can be used with 
+loop :: (MonadSwitch t m) => (a -> m (Event t a)) -> a -> m (Event t a)
+loop f a = do
   rec
-    e <- switchPromptlyDyn <$> holdM (f a) (f <$> e)
+    e <- switchPromptlyDyn <$> widgetHold (f a) (f <$> e)
     
   return e
 
@@ -131,13 +145,13 @@ infixr 8 :>>
 Chain f    >-> c  =  f :>> c 
 (f :>> c') >-> c  =  f :>> (c' >-> c) 
 
-toFlow :: (MonadSwitch t m) => Chain t m a b -> a -> Flow t m (Event t b)
-toFlow (Chain f) a = Flow $ do 
+toFlow :: (MonadSwitch t m) => Chain t m a b -> a -> Workflow t m (Event t b)
+toFlow (Chain f) a = Workflow $ do 
   e <- f a 
   return (e, end <$ e)
-    where end = Flow $ return (never, never)
+    where end = Workflow $ return (never, never)
     
-toFlow (f :>> c) a = Flow $ do
+toFlow (f :>> c) a = Workflow $ do
   e <- f a
   return (never, toFlow c <$> e)
   
