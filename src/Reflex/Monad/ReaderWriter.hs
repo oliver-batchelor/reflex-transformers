@@ -55,7 +55,7 @@ runReaderWriterT (ReaderWriterT m) r = do
   return (a, w)
 
   
-execReaderWriterT :: (Monad m, Monoid w) => ReaderWriterT r w m a -> r -> m w
+execReaderWriterT :: (Functor m, Monad m, Monoid w) => ReaderWriterT r w m a -> r -> m w
 execReaderWriterT m r = snd <$> runReaderWriterT m r
   
   
