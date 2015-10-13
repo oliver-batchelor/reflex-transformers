@@ -37,6 +37,9 @@ import Data.Map.Strict (Map)
 import Prelude
 
 
+-- | Abstraction for splittable ID supplies, priovided is an instance for Enum a => [a]  
+-- but a more efficient supply would be for example, found in the concurrent-supply package.
+-- at the cost of determinism.
 class Splitable s i | s -> i where
   
   freshId :: s -> (i, s)
@@ -53,7 +56,8 @@ instance Enum a => Splitable [a] [a] where
     where xs' = snd (freshId xs)
 
     
-    
+-- | ID Supply transformer for switchable reflex stacks over splittable ID supplies
+-- Fresh variables are obtained using getFresh. Admits a MonadSwitch instance. 
 newtype SupplyT s m a = SupplyT (StateT s m a)
   deriving (Functor, Applicative, Monad, MonadTrans, MonadFix)
   
@@ -64,18 +68,21 @@ deriving instance MonadWriter w m => MonadWriter w (SupplyT s m)
 deriving instance MonadSample t m => MonadSample t (SupplyT s m)
 deriving instance MonadHold t m => MonadHold t (SupplyT s m)
 
+-- | Non transformer version
 type Supply s a = SupplyT s Identity a
 
-  
+
 instance MonadState st m => MonadState st (SupplyT s m)  where
   get = lift get
   put = lift . put
 
-
+-- | Obtain a fresh ID from the Supply
 getFresh :: (Monad m, Splitable s i) => SupplyT s m i
 getFresh = SupplyT $ state freshId
 
 
+-- | Obtain a value of the ID Supply which provides distinct ids from those 
+-- returned from the Monad in future.
 getSplit :: (Monad m, Splitable s i) => SupplyT s m s
 getSplit = SupplyT $ state splitSupply
 
