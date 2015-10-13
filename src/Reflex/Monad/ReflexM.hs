@@ -10,6 +10,8 @@ import Data.Traversable
 
 import Prelude
 
+-- | Base Monad which sits at the bottom of a (pure) switching Monad transformer stack providing
+-- the base switching capabilities.
 
 newtype ReflexM t a = ReflexM { runReflexM :: forall m. MonadReflex t m => m a }
 

@@ -36,26 +36,26 @@ import Control.Monad.Writer.Class
 import Prelude
 
 
--- Constraint type to capture common usage together
+-- | Constraint type to capture common usage together
 type MonadReflex t m = (Reflex t, MonadHold t m, MonadFix m)    
 
     
 class (MonadReflex t m) => MonadSwitch t m | m -> t where
   
-  -- | Map the result of an initial monadic action and updates and swap 
-  -- it out with a new one whenever the event provided fires.
-  -- returns an 'Updated' giving the initial value plus updates
-  -- 
+    -- | Map the result of an initial monadic action and updates and swap 
+    -- it out with a new one whenever the event provided fires.
+    -- returns an Updated giving the initial value plus updates
+  
     switchM ::  Updated t (m a) -> m (Updated t a)
     switchM u = do 
       m <- switchMapM (toMap (Just <$> u))
       return $ fromJust <$> fromMap m
     
         
-  -- | Similar to holdM but operating on a collection of widgets
-  -- provided as an 'UpdatedMap'.
-  -- switchM/switchM' can be implemented in terms of switchMapM 
-  -- therefore switchMapM is a minimal implementation.
+    -- | Similar to holdM but operating on a collection of widgets
+    -- provided as an 'UpdatedMap'.
+    -- switchM/switchM' can be implemented in terms of switchMapM 
+    -- therefore switchMapM is a minimal implementation.
     switchMapM ::  Ord k => UpdatedMap t k (m a) -> m (UpdatedMap t k a)
     
     
@@ -88,7 +88,7 @@ instance (MonadSwitch t m, SwitchMerge t w) => MonadSwitch t (WriterT w m) where
     
   
 
- -- | A few conversions for switchM in terms of switchMapM
+-- A few conversions for switchM in terms of switchMapM
 maybeToMap :: Maybe a -> Map () a
 maybeToMap Nothing  = mempty
 maybeToMap (Just a) = Map.singleton () a

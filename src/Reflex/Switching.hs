@@ -1,6 +1,12 @@
 {-# LANGUAGE UndecidableInstances #-}
 
-module Reflex.Switching where
+module Reflex.Switching 
+  ( Switching (..)
+  , SwitchMerge (..)
+  , switching'
+  , switchMerge'
+  
+  ) where
 
 
 import Reflex.Class hiding (constant)
@@ -24,6 +30,7 @@ class (Reflex t) => Switching t r  where
    switching :: MonadHold t m => r -> Event t r -> m r
    
 class (Switching t r, Monoid r) => SwitchMerge t r  where   
+   -- | Switching for a changing collections of reactive types
    switchMerge :: (MonadFix m, MonadHold t m, Ord k) => Map k r -> Event t (Map k (Maybe r)) -> m r
 
 
@@ -82,9 +89,13 @@ instance (Semigroup a, Reflex t) => Switching t (Event t a) where
 instance (Reflex t) => Switching t () where
   switching _ _ = pure ()
   
+  
+-- | Helper which takes an UpdatedMap as one argument (instead of initial value, update event separately)
 switchMerge' :: (Reflex t, SwitchMerge t r, MonadFix m, MonadHold t m, Ord k) => UpdatedMap t k r -> m r 
 switchMerge' (UpdatedMap initial e) = switchMerge initial e  
 
+
+-- | Helper which takes an Updated as one argument (instead of initial value, update event separately)
 switching' :: (Reflex t, Switching t r, MonadFix m, MonadHold t m) => Updated t r -> m r 
 switching' (Updated initial e) = switching initial e  
 

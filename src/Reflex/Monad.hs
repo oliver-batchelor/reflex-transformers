@@ -46,7 +46,9 @@ import Prelude
 
 
   
-
+-- | Hold a monadic widget and update it whenever the Event provides a new
+-- monadic widget, swapping out the previously active widget.
+-- Returns a Dynamic giving the return values of widgets created
 widgetHold :: (MonadSwitch t m) => m a -> Event t (m a) -> m (Dynamic t a)
 widgetHold initial e = holdDyn' =<< switchM (Updated initial e)
 
@@ -59,11 +61,16 @@ withIds initial added = do
       zipFrom n = Map.fromList . zip [n..] 
     
 
-
+-- | Non monadic version of collection, builds a collection from an initial list and a list of updated values
+-- items remove themselves upon the event triggering.
+-- returns an UpdatedMap with keys assigned to items in ascending order
 collect :: (MonadReflex t m) => [(a, Event t ())] -> Event t [(a, Event t ())] -> m (UpdatedMap t Int a)
 collect initial added = runReflexM $ collection (pure <$> initial)  (fmap pure <$> added)
     
-    
+
+-- | Builds a collection of widgets from an initial list and events providing new widgets to create
+-- as with collect, items remove themselves upon the event triggering.    
+-- returns an UpdatedMap with keys assigned to items in ascending order
 collection :: (MonadSwitch t m) => [m (a, Event t ())] -> Event t [m (a, Event t ())] -> m (UpdatedMap t Int a)
 collection initial added = do 
   (initialMap, addedMap) <- withIds initial added
@@ -81,6 +88,8 @@ collection initial added = do
   
 
     
+-- | Provides a view into a Dynamic Map value, where sub-views are created using a function passed in
+-- returns a Dynamic Map of values returned from child views upon creation.
 
 mapView :: (MonadSwitch t m, Ord k) => Dynamic t (Map k v) -> (k -> Dynamic t v ->  m a) ->  m (Dynamic t (Map k a))
 mapView input childView =  do
@@ -95,13 +104,16 @@ mapView input childView =  do
     
     
     
+
+-- | Recursive Workflow datatype, see 'workflow' below
+
+newtype Workflow t m a = Workflow { unFlow :: m (a, Event t (Workflow t m a)) }
+
+
 -- | Provide a widget which swaps itself out for another widget upon an event
 -- (recursively)
 -- Useful if the sequence of widgets needs to return a value (as opposed to passing it 
 -- down the chain).
-
-
-newtype Workflow t m a = Workflow { unFlow :: m (a, Event t (Workflow t m a)) }
 
 workflow :: (MonadSwitch t m) => Workflow t m a -> m (Dynamic t a)
 workflow (Workflow w) = do
@@ -131,7 +143,7 @@ loop f a = do
 
 
 
-  
+-- | Data type wrapping chainable widgets of the type (a -> m (Event t a)) 
 data Chain t m a b where
     Chain :: (a -> m (Event t b)) -> Chain t m a b
     (:>>) ::  (a -> m (Event t b)) -> Chain t m b c ->  Chain t m a c
@@ -141,6 +153,9 @@ infixr 9 >->
 infixr 8 :>>
 
   
+-- | Compose two 'Chain' values passing the output event of one 
+-- into the construction function of the next.
+
 (>->) :: Chain t m a b -> Chain t m b c -> Chain t m a c  
 Chain f    >-> c  =  f :>> c 
 (f :>> c') >-> c  =  f :>> (c' >-> c) 
