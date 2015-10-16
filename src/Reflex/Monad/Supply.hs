@@ -4,6 +4,9 @@
 module Reflex.Monad.Supply
   ( SupplyT 
   , Supply
+  
+  , Splittable(..)
+  
   , runSupplyT
   , evalSupplyT
 
@@ -37,9 +40,10 @@ import Data.Map.Strict (Map)
 import Prelude
 
 
--- | Abstraction for splittable ID supplies, priovided is an instance for Enum a => [a]  
+-- | Abstraction for splittable identifier supplies, priovided is an instance for Enum a => [a]  
 -- but a more efficient supply would be for example, found in the concurrent-supply package.
 -- at the cost of determinism.
+-- Two parameters, a state 's' and an identifier type 'i'
 class Splitable s i | s -> i where
   
   freshId :: s -> (i, s)
@@ -87,11 +91,12 @@ getSplit :: (Monad m, Splitable s i) => SupplyT s m s
 getSplit = SupplyT $ state splitSupply
 
 
-
+-- | Run a non transformer Supply using a split 
 runSplit ::  (Monad m, Splitable s i) =>  SupplyT s m a -> Supply s (m a)
 runSplit m = evalSupplyT m <$> getSplit
   
 
+-- | Run a SupplyT with a Spittable state
 runSupplyT :: Monad m => SupplyT s m a -> s -> m (a, s)
 runSupplyT (SupplyT m) = runStateT m 
 
