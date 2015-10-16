@@ -5,7 +5,7 @@ module Reflex.Monad.Supply
   ( SupplyT 
   , Supply
   
-  , Splittable(..)
+  , Splitable(..)
   
   , runSupplyT
   , evalSupplyT
