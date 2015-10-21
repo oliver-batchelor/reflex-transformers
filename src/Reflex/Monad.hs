@@ -1,10 +1,8 @@
 
--- | Module supporting the implementation of frameworks. You should import this if you
--- want to build your own framework, along with one of the base MonadSwitch classes: 
---
--- Reflex.Monad.App for MonadIO based frameworks
--- or Reflex.Monad.ReflexM for pure frameworks
---
+-- | Combinators based on the MonadSwitch abstraction, a framework
+-- will typically use a stack of Monads based on ReflexM (for pure frameworks).
+-- The combinators in this module can then be used to provide monadic switching,
+-- sequencing and collections.
 
 module Reflex.Monad 
   ( module Reflex.Monad.Class
@@ -24,6 +22,7 @@ module Reflex.Monad
   , (>->)
   
   , loop
+  , activity
   
   ) where
 
@@ -133,7 +132,7 @@ chain c a = switchPromptlyDyn <$> workflow (toFlow c a)
 
 -- | Provide a way of looping (a -> m (Event t a)), each iteration switches
 -- out the previous iteration.
--- Can be used with 
+-- Can be used with Chain to repeat a sequence.
 loop :: (MonadSwitch t m) => (a -> m (Event t a)) -> a -> m (Event t a)
 loop f a = do
   rec
@@ -141,6 +140,15 @@ loop f a = do
     
   return e
 
+  
+-- | Run a widget (from an Event) until an Event is recieved.
+-- If a second widget arrives before the first is finished, swap it out for the second.
+activity :: MonadSwitch t m => Event t (m (Event t a)) -> m (Event t a)
+activity e = do
+  rec 
+    e' <- switch . current <$> 
+      (widgetHold (return never) $ leftmost [e, return never <$ e'])
+  return e'
 
 
 -- | Data type wrapping chainable widgets of the type (a -> m (Event t a)) 
