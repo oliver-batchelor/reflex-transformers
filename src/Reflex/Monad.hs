@@ -179,3 +179,17 @@ toFlow (f :>> c) a = Workflow $ do
   return (never, toFlow c <$> e)
   
   
+  
+-- sequenceEvents :: (MonadSwitch t m, Ord k) => UpdatedMap k (Event t a -> m (Event t a)) ->  Event t a -> m (Event t a)
+-- sequenceEvents items input = do
+--   rec 
+--     let input k     = switch (previous k <$> b)
+--         previous k  = fromMaybe input . Map.lookupLT k
+--   
+--     b <- holdMap outputs
+--     outputs <- holdMapM $ imap (\k f -> f (input k)) items
+--     
+--   return (switch $ fromMaybe input . fmap fst .  Map.maxView <$> b)
+--   
+  
+
