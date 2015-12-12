@@ -78,7 +78,7 @@ collection initial added = do
     (values, remove) <- fmap split <$> switchMapM $ UpdatedMap initialMap $ 
         mergeWith (<>) [ fmap Just <$> addedMap, toRemove ]
       
-    toRemove <- switchMerge' $ makeRemovals remove
+    toRemove <- switchConcat' $ makeRemovals remove
   return values
 
   where

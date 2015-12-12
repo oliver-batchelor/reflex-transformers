@@ -70,7 +70,7 @@ runReaderWriter :: (Monoid w) => ReaderWriter r w a -> r -> (a, w)
 runReaderWriter rw r = runIdentity $ runReaderWriterT rw r 
 
 
-instance (MonadSwitch t m, SwitchMerge t w) => MonadSwitch t (ReaderWriterT r w m) where
+instance (MonadSwitch t m, SwitchConcat t w) => MonadSwitch t (ReaderWriterT r w m) where
 
   switchM u = do
     env   <- ask
@@ -82,7 +82,7 @@ instance (MonadSwitch t m, SwitchMerge t w) => MonadSwitch t (ReaderWriterT r w 
   switchMapM um = do
     env   <- ask
     (a, w) <- lift $ split <$> switchMapM (flip runReaderWriterT env <$> um)
-    tell =<< switchMerge' w
+    tell =<< switchConcat' w
     return a
     
 

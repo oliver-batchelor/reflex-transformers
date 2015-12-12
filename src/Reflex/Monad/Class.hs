@@ -73,7 +73,7 @@ instance MonadSwitch t m => MonadSwitch t (ReaderT e m) where
 
     
 
-instance (MonadSwitch t m, SwitchMerge t w) => MonadSwitch t (WriterT w m) where
+instance (MonadSwitch t m, SwitchConcat t w) => MonadSwitch t (WriterT w m) where
 
   switchM u = do
     (a, w) <- lift $ split <$> switchM (runWriterT <$> u)
@@ -83,7 +83,7 @@ instance (MonadSwitch t m, SwitchMerge t w) => MonadSwitch t (WriterT w m) where
 
   switchMapM um = do
     (a, w) <- lift $ split <$> switchMapM (runWriterT <$> um)
-    tell =<< switchMerge' w
+    tell =<< switchConcat' w
     return a
     
   
