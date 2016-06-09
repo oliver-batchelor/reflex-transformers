@@ -80,7 +80,7 @@ instance (Reflex t) => SwitchConcat t () where
 instance (Monoid a, Reflex t) => Switching t (Behavior t a)  where
   switching = switcher
 
-instance (Semigroup a, Reflex t) => Switching t (Event t a) where
+instance Reflex t => Switching t (Event t a) where
   switching e updates = switch <$> hold e updates
 
 instance (Reflex t) => Switching t () where
